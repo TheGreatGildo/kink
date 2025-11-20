@@ -9,11 +9,17 @@ import {
 } from '@rainbow-me/rainbowkit/wallets';
 import { createConfig, http } from 'wagmi';
 import { localhost, optimism } from 'wagmi/chains';
+import type { Chain } from 'viem/chains';
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '';
 const appName = 'Kink DEX';
 
-const chains = [optimism, { ...localhost, id: 31337 }];
+const devChain: Chain = {
+  ...localhost,
+  id: 31337,
+};
+
+const chains: readonly [Chain, ...Chain[]] = [optimism, devChain];
 
 if (!projectId) {
   throw new Error('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is required');

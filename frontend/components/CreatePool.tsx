@@ -617,7 +617,7 @@ export default function CreatePool() {
                   Pool Created Successfully!
                 </div>
                 <a
-                  href={`https://sepolia-optimism.etherscan.io/tx/${hash}`}
+                  href={`https://optimistic.etherscan.io/tx/${hash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-[#00ffff] hover:underline font-mono inline-flex items-center gap-1"

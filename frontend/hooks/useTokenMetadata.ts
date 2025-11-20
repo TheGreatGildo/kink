@@ -47,7 +47,9 @@ export function useTokenMetadata(tokenAddress: string | undefined) {
   const libraryToken = normalizedAddress ? getTokenInfo(normalizedAddress) : undefined;
 
   // Read from chain as fallback
-  const isValidAddress = normalizedAddress && normalizedAddress.startsWith('0x') && normalizedAddress.length === 42;
+  const isValidAddress = Boolean(
+    normalizedAddress && normalizedAddress.startsWith('0x') && normalizedAddress.length === 42
+  );
 
   const { data: onChainName } = useReadContract({
     address: (isValidAddress ? normalizedAddress : undefined) as `0x${string}` | undefined,

@@ -81,6 +81,7 @@ export function usePools(factoryAddress: string) {
     }
 
     async function fetchPools() {
+      if (!publicClient) return;
       try {
         // First, add the deployed pool if it exists
         const poolList: Pool[] = [];

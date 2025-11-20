@@ -569,7 +569,7 @@ export default function Swap({ poolAddress }: SwapProps) {
               <div className="flex-1">
                 <div className="font-bold text-green-400 mb-1 text-xl">Swap Successful!</div>
                 <a
-                  href={`https://sepolia-optimism.etherscan.io/tx/${hash}`}
+                  href={`https://optimistic.etherscan.io/tx/${hash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-[#00ffff] hover:underline font-mono inline-flex items-center gap-1"

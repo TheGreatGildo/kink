@@ -1,0 +1,16 @@
+{
+  "name": "kink-dex",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "npm --prefix ./frontend install",
+    "dev": "npm --prefix ./frontend run dev",
+    "build": "npm --prefix ./frontend run build",
+    "start": "npm --prefix ./frontend run start",
+    "lint": "npm --prefix ./frontend run lint",
+    "test": "npm --prefix ./frontend run-script test --if-present"
+  }
+}
+

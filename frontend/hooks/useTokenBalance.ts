@@ -22,7 +22,9 @@ export function useTokenBalance(tokenAddress: string | undefined) {
 
   // Normalize address to ensure it's valid
   const normalizedAddress = tokenAddress?.toLowerCase().trim();
-  const isValidAddress = normalizedAddress && normalizedAddress.startsWith('0x') && normalizedAddress.length === 42;
+  const isValidAddress = Boolean(
+    normalizedAddress && normalizedAddress.startsWith('0x') && normalizedAddress.length === 42
+  );
 
   const { data: balance, ...rest } = useReadContract({
     address: (isValidAddress ? normalizedAddress : undefined) as `0x${string}` | undefined,
@@ -30,7 +32,7 @@ export function useTokenBalance(tokenAddress: string | undefined) {
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     query: {
-      enabled: isValidAddress && !!address,
+      enabled: isValidAddress && Boolean(address),
     },
   });
 

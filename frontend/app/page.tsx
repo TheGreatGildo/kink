@@ -159,7 +159,7 @@ export default function Home() {
             </p>
             <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-border/60 bg-secondary/60 px-4 py-2 text-sm font-medium text-foreground dark:bg-white/5">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-              <span>Live on Optimism Sepolia</span>
+              <span>Live on Optimism Mainnet</span>
             </div>
           </header>
         )}
