@@ -11,6 +11,7 @@ import { WagmiProvider } from 'wagmi';
 import { config } from '../config/wagmi';
 import { ThemeProvider, useTheme } from '../components/providers/ThemeProvider';
 import './globals.css';
+import './milady.css';
 
 const queryClient = new QueryClient();
 
@@ -20,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="milady">
       <body className="antialiased">
         <ThemeProvider>
           <AppProviders>{children}</AppProviders>

@@ -74,6 +74,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
     root.classList.toggle('dark', isDarkMode);
+    root.setAttribute('data-theme', isDarkMode ? 'dark' : 'milady');
     root.style.setProperty('color-scheme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
