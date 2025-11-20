@@ -1,0 +1,62 @@
+🚀 Deploying Kink DEX to Optimism...
+📦 Building contracts...
+No files changed, compilation skipped
+📄 Extracting ABIs...
+✅ ABIs copied to frontend/contracts/
+🌉 Deploying to Optimism...
+No files changed, compilation skipped
+Traces:
+  [4219764] → new DeployOptimism@0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519
+    └─ ← [Return] 20964 bytes of code
+
+  [3338147] DeployOptimism::run()
+    ├─ [0] VM::envUint("PRIVATE_KEY") [staticcall]
+    │   └─ ← [Return] <env var value>
+    ├─ [0] VM::envString("OPTIMISM_RPC_URL") [staticcall]
+    │   └─ ← [Return] <env var value>
+    ├─ [0] VM::createSelectFork("https://optimism.gateway.tenderly.co")
+    │   └─ ← [Return] 1
+    ├─ [0] VM::startBroadcast(<pk>)
+    │   └─ ← [Return] 
+    ├─ [0] console::log("Deploying KinkFactory...") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [2259480] → new KinkFactory@0x7629f28a03f49F06260F2923c038c4473d06EEBE
+    │   ├─ [1951772] → new KinkPool@0x4Cb36C66C729B67a7746c1E40c293f0acf22c750
+    │   │   ├─ emit Initialized(version: 18446744073709551615 [1.844e19])
+    │   │   └─ ← [Return] 9297 bytes of code
+    │   └─ ← [Return] 1366 bytes of code
+    ├─ [0] console::log("KinkFactory deployed at:", KinkFactory: [0x7629f28a03f49F06260F2923c038c4473d06EEBE]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Deploying KinkRouter...") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [991867] → new KinkRouter@0x63967324161a688F5ED35d15f69644e86101cF57
+    │   └─ ← [Return] 4953 bytes of code
+    ├─ [0] console::log("KinkRouter deployed at:", KinkRouter: [0x63967324161a688F5ED35d15f69644e86101cF57]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::stopBroadcast()
+    │   └─ ← [Return] 
+    ├─ [0] VM::serializeAddress("<stringified JSON>", "factory", 0x7629f28a03f49F06260F2923c038c4473d06EEBE)
+    │   └─ ← [Return] "{\"factory\":\"0x7629f28a03f49F06260F2923c038c4473d06EEBE\"}"
+    ├─ [0] VM::serializeAddress("<stringified JSON>", "router", 0x63967324161a688F5ED35d15f69644e86101cF57)
+    │   └─ ← [Return] "{\"router\":\"0x63967324161a688F5ED35d15f69644e86101cF57\"}"
+    ├─ [0] VM::serializeString("<stringified JSON>", "chainId", "10")
+    │   └─ ← [Return] "{\"chainId\":10}"
+    ├─ [0] VM::serializeString("<stringified JSON>", "chainName", "optimism")
+    │   └─ ← [Return] "{\"chainName\":\"optimism\"}"
+    ├─ [0] VM::toString(1763570767 [1.763e9]) [staticcall]
+    │   └─ ← [Return] "1763570767"
+    ├─ [0] VM::serializeString("<stringified JSON>", "deployedAt", "1763570767")
+    │   └─ ← [Return] "{\"deployedAt\":1763570767}"
+    ├─ [0] VM::writeJson("<stringified JSON>", "./deployment-optimism.json")
+    │   └─ ← [Revert] the path deployment-optimism.json is not allowed to be accessed for write operations
+    └─ ← [Revert] the path deployment-optimism.json is not allowed to be accessed for write operations
+
+
+
+== Logs ==
+  Deploying KinkFactory...
+  KinkFactory deployed at: 0x7629f28a03f49F06260F2923c038c4473d06EEBE
+  Deploying KinkRouter...
+  KinkRouter deployed at: 0x63967324161a688F5ED35d15f69644e86101cF57
+Error: 
+script failed: the path deployment-optimism.json is not allowed to be accessed for write operations

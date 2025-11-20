@@ -1,0 +1,24 @@
+.env
+.env.*
+*.env
+*.env.*
+*.key
+*.pem
+*.p12
+
+# Local tooling
+.DS_Store
+.vscode/
+.idea/
+.venv/
+.venv-tools/
+__pycache__/
+
+# Foundry artifacts
+out/
+cache/
+broadcast/
+lib/
+crytic-export/
+echidna-corpus/
+

@@ -1,0 +1,6 @@
+testLimit: 20000
+seed: 0
+corpusDir: "echidna-corpus"
+seqLen: 12
+testMode: property
+

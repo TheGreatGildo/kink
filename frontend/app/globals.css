@@ -1,0 +1,159 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(0.98 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(0.98 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.65 0.2292 29.45);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+
+  --header-height: 6rem;
+  --outline: oklch(0.5 0.08 240);
+  --progress: oklch(0.65 0.1925 283.02 / 50%);
+
+  --ethereum: oklch(0.62 0.16 270.14);
+  --arbitrum: oklch(0.31 0.0453 256.52);
+  --optimism: oklch(0.63 0.2554 26.67);
+}
+
+.dark {
+  --background: oklch(0.24 0.005 240);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(1 0 0 / 0.05);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.3 0.022 240);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.32 0.06 240);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.69 0.1992 29.45);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+
+  --outline: oklch(0.6 0.05 240);
+}
+
+@theme {
+  --font-sans:
+    'Montserrat', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-alcxTitles: 'Montserrat', sans-serif;
+
+  --color-bg-gradient-from: oklch(0.32 0.06 240);
+  --color-bg-gradient-to: oklch(0.23 0.0038 106.69);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-outline: var(--outline);
+  --color-progress: var(--progress);
+
+  --color-optimism: var(--optimism);
+  --color-arbitrum: var(--arbitrum);
+  --color-ethereum: var(--ethereum);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply scrollbar-gutter-stable bg-background! text-foreground dark:from-bg-gradient-from dark:to-bg-gradient-to dark:bg-radial-[at_50%_-200%] dark:from-[6%] dark:bg-clip-padding dark:bg-top dark:bg-no-repeat;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+}
+
+@utility layered-shadow {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.075),
+    0 1px 2px 0 rgba(0, 0, 0, 0.075),
+    0 1px 3px 0 rgba(0, 0, 0, 0.1);
+
+  @variant dark {
+    box-shadow: none;
+  }
+}
+
+@utility layered-shadow-md {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.075),
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+
+  @variant dark {
+    box-shadow: none;
+  }
+}
+
+@utility layered-shadow-lg {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.075),
+    0 8px 12px -2px rgba(0, 0, 0, 0.12),
+    0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  @variant data-[animate-shadow=true] {
+    @variant group-hover {
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.1),
+        0 12px 20px -2px rgba(0, 0, 0, 0.15),
+        0 6px 10px -2px rgba(0, 0, 0, 0.06);
+    }
+  }
+  @variant dark {
+    box-shadow: none;
+  }
+}
+
+@utility scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
+@utility bg-progress-foreground {
+  @apply bg-linear-to-r from-[oklch(0.76_0.1534_231.64)] to-[oklch(0.65_0.1925_283.02)];
+}
