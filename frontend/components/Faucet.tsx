@@ -94,7 +94,8 @@ export default function Faucet() {
     <div className="glass-card p-6 md:p-12 max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-center gap-4 mb-10">
         <FaucetIcon className="w-12 h-12 text-[#00ffff]" />
-        <h2 className="text-4xl font-bold gradient-text text-center">Token Faucet</h2>
+        <h2 className="text-4xl font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent text-center">
+        Token Faucet</h2>
       </div>
 
       <div className="space-y-6">

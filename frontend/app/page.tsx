@@ -94,7 +94,7 @@ export default function Home() {
                       onClick={() => setActiveTab(tab.id)}
                       className={`flex items-center gap-2 rounded-full px-5 py-2 font-semibold transition-all ${
                         activeTab === tab.id
-                          ? 'bg-primary/90 text-primary-foreground shadow-lg'
+                          ? 'bg-primary/90 text-primary-foreground shadow-lg dark:bg-linear-to-r dark:from-[#00ffff] dark:to-[#ff00ff] dark:text-black dark:border-none'
                           : 'text-foreground/70 hover:bg-muted hover:text-foreground'
                       }`}
                     >
@@ -133,7 +133,7 @@ export default function Home() {
                       }}
                       className={`flex items-center gap-3 rounded-xl px-4 py-3 font-semibold transition-all ${
                         activeTab === tab.id
-                          ? 'bg-primary/90 text-primary-foreground shadow-lg'
+                          ? 'bg-primary/90 text-primary-foreground shadow-lg dark:bg-linear-to-r dark:from-[#00ffff] dark:to-[#ff00ff] dark:text-black dark:border-none'
                           : 'bg-muted text-foreground/70 hover:bg-muted/70'
                       }`}
                     >
@@ -189,8 +189,8 @@ export default function Home() {
               {(activeTab === 'pools' || (!selectedPool && (activeTab === 'swap' || activeTab === 'liquidity'))) && (
                 <div className="w-full glass-card p-6 md:p-12 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="flex items-center justify-center gap-4 mb-10">
-                    <PoolsIcon className="w-12 h-12 text-[#ff00ff]" />
-                    <h2 className="text-4xl font-bold gradient-text text-center">
+                    <PoolsIcon className="w-12 h-12 text-[#00ffff]" />
+        <h2 className="text-4xl font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent text-center">
                       {activeTab === 'pools' ? 'Liquidity Pools' : 'Select a Pool'}
                     </h2>
                   </div>
@@ -210,7 +210,7 @@ export default function Home() {
                       </p>
                       <button
                         onClick={() => setActiveTab('create')}
-                        className="glow-button rounded-xl px-10 py-4 text-lg font-semibold"
+                        className="glow-button rounded-xl px-10 py-4 text-lg font-semibold dark:bg-linear-to-r dark:from-[#00ffff] dark:to-[#ff00ff] dark:text-black dark:border-none"
                       >
                         Create Pool
                       </button>

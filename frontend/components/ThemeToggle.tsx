@@ -33,7 +33,7 @@ export function ThemeToggle({ className }: { className?: string }) {
             className={cn(
               'flex items-center gap-2 rounded-xl px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-wide transition-colors',
               isActive
-                ? 'bg-primary/90 text-primary-foreground shadow-sm'
+                ? 'bg-primary/90 text-primary-foreground shadow-sm dark:bg-linear-to-r dark:from-[#00ffff] dark:to-[#ff00ff] dark:text-black dark:border-none'
                 : 'text-muted-foreground hover:text-foreground',
             )}
             onClick={() => handleModeToggle(mode.id)}

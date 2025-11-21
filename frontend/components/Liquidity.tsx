@@ -479,7 +479,7 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
       {/* Header */}
       <div className="flex flex-col items-center gap-3 mb-6 text-center">
         <div className="flex items-center gap-3">
-          <LiquidityIcon className="w-12 h-12 text-[#ff00ff]" />
+          <LiquidityIcon className="w-12 h-12 text-[#00ffff]" />
           <h2 className="text-4xl font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">Liquidity</h2>
         </div>
         <div className="rounded-xl border border-border/50 bg-muted/40 px-4 py-2">
@@ -492,12 +492,12 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
 
       {/* Action Toggle */}
       <div className="flex gap-3 mb-6 rounded-xl border border-border/50 bg-muted/40 p-2 flex-wrap justify-center">
-        <button
+          <button
           onClick={() => setAction('add')}
           className={cn(
             "px-4 py-2 rounded-xl font-semibold transition-all duration-300",
             action === 'add'
-              ? 'bg-linear-to-r from-[#00ffff] to-[#ff00ff] text-black'
+              ? 'bg-linear-to-r from-[#00ffff] to-[#ff00ff] text-black dark:bg-linear-to-r dark:from-[#00ffff] dark:to-[#ff00ff] dark:text-black dark:border-none'
               : 'text-muted-foreground bg-transparent border border-border/50 hover:bg-muted/50'
           )}
         >
@@ -506,12 +506,12 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
             <span>Add</span>
           </span>
         </button>
-        <button
+          <button
           onClick={() => setAction('remove')}
           className={cn(
             "px-6 py-3 rounded-xl font-semibold transition-all duration-300",
             action === 'remove'
-              ? 'bg-linear-to-r from-red-500 to-pink-500 shadow-lg shadow-red-500/50 text-white'
+              ? 'bg-linear-to-r from-red-500 to-pink-500 shadow-lg shadow-red-500/50 text-white dark:bg-linear-to-r dark:from-red-500 dark:to-pink-500 dark:text-white dark:border-none'
               : 'text-muted-foreground bg-transparent border border-border/50 hover:bg-muted/50'
           )}
         >
@@ -685,7 +685,7 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
               parseFloat(amount1) === 0 ||
               !!simulateError
             }
-            className="w-full px-4 py-6 text-lg font-bold rounded-xl bg-linear-to-r from-[#06ffa5] via-[#ff006e] to-[#8338ec] text-white hover:opacity-90 transition-opacity mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-6 text-lg font-bold rounded-xl bg-linear-to-r from-[#00ffff] to-[#ff00ff] text-black hover:opacity-90 transition-opacity mt-2 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-linear-to-r dark:from-[#00ffff] dark:to-[#ff00ff] dark:text-black dark:border-none"
           >
             {renderAddLiquidityButtonContent()}
           </Button>
@@ -792,7 +792,7 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
           <Button
             onClick={handleRemoveLiquidity}
             disabled={isPending || isConfirming || !lpAmount}
-            className="w-full px-4 py-6 text-lg font-bold rounded-xl text-white bg-linear-to-r from-red-500 to-pink-500 hover:opacity-90 transition-opacity shadow-lg hover:shadow-red-500/50 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-6 text-lg font-bold rounded-xl text-white bg-linear-to-r from-red-500 to-pink-500 hover:opacity-90 transition-opacity shadow-lg hover:shadow-red-500/50 mt-2 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-linear-to-r dark:from-red-500 dark:to-pink-500 dark:text-white dark:border-none"
           >
             {isPending ? (
               <span className="flex items-center justify-center gap-4">

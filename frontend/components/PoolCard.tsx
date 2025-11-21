@@ -91,6 +91,7 @@ export function PoolCard({ pool, isActive, onSelect }: PoolCardProps) {
               event.stopPropagation();
               handleSelect();
             }}
+            className="w-full dark:bg-linear-to-r dark:from-[#00ffff] dark:to-[#ff00ff] dark:text-black dark:border-none dark:hover:opacity-90"
           >
             {isActive ? 'Selected' : 'Trade this Pool'}
           </Button>
