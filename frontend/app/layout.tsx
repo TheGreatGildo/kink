@@ -10,6 +10,8 @@ import {
 import { WagmiProvider } from 'wagmi';
 import { config } from '../config/wagmi';
 import { ThemeProvider, useTheme } from '../components/providers/ThemeProvider';
+import Header from '../components/Header';
+import BackgroundParticles from '../components/BackgroundParticles';
 import './globals.css';
 import './milady.css';
 
@@ -24,7 +26,11 @@ export default function RootLayout({
     <html lang="en" data-theme="milady">
       <body className="antialiased">
         <ThemeProvider>
-          <AppProviders>{children}</AppProviders>
+          <AppProviders>
+            <BackgroundParticles />
+            <Header />
+            {children}
+          </AppProviders>
         </ThemeProvider>
       </body>
     </html>
@@ -35,8 +41,31 @@ function AppProviders({ children }: { children: React.ReactNode }) {
   const { isDarkMode } = useTheme();
 
   const rainbowTheme = isDarkMode
-    ? rainbowDarkTheme({ borderRadius: 'medium', accentColor: '#F5C09A' })
-    : rainbowLightTheme({ borderRadius: 'medium', accentColor: '#0A3F65' });
+    ? rainbowDarkTheme({
+        borderRadius: 'medium',
+        accentColor: '#00ffff', // Cyan accent to match Kink Dex theme
+        accentColorForeground: 'black', // Black text on cyan button
+        fontStack: 'system',
+        overlayBlur: 'small',
+      })
+    : rainbowLightTheme({
+        borderRadius: 'medium',
+        accentColor: '#0A3F65'
+      });
+
+  // Customize modal colors for dark mode manually if supported by theme object properties
+  // RainbowKit themes are objects, we can override specific colors.
+  if (isDarkMode) {
+     // Deep merge or override colors to match dark theme background
+     // Standard dark theme background is #1A1B1E.
+     // We want something closer to our oklch(0.24 0.005 240) -> approx #2b2d31 or just darker.
+     // Let's try to make it fit seamlessly.
+     if (rainbowTheme.colors) {
+         rainbowTheme.colors.modalBackground = '#1a1b1f'; // Dark grey/blue
+         rainbowTheme.colors.modalText = '#ffffff';
+         rainbowTheme.colors.modalBorder = 'rgba(255, 255, 255, 0.1)';
+     }
+  }
 
   return (
     <WagmiProvider config={config}>

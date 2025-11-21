@@ -64,6 +64,29 @@
 
   --color-bg-gradient-from: oklch(0.32 0.06 240);
   --color-bg-gradient-to: oklch(0.23 0.0038 106.69);
+
+  --animate-float: float 10s ease-in-out infinite;
+  --animate-firefly-flash: firefly-flash 3s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0) translateX(0);
+    }
+    25% {
+      transform: translateY(-10px) translateX(5px);
+    }
+    50% {
+      transform: translateY(-5px) translateX(-5px);
+    }
+    75% {
+      transform: translateY(5px) translateX(8px);
+    }
+  }
+
+  @keyframes firefly-flash {
+    0%, 100% { opacity: 0.1; transform: scale(0.8); }
+    50% { opacity: 0.5; transform: scale(1.2); box-shadow: 0 0 4px 1px rgba(0, 255, 255, 0.2); }
+  }
 }
 
 @theme inline {
@@ -102,7 +125,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply scrollbar-gutter-stable bg-background! text-foreground dark:from-bg-gradient-from dark:to-bg-gradient-to dark:bg-radial-[at_50%_-200%] dark:from-[6%] dark:bg-clip-padding dark:bg-top dark:bg-no-repeat;
+    @apply min-h-screen scrollbar-gutter-stable bg-background! text-foreground dark:from-bg-gradient-from dark:to-bg-gradient-to dark:bg-radial-[at_50%_-200%] dark:from-6% dark:bg-clip-padding dark:bg-top dark:bg-no-repeat;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
