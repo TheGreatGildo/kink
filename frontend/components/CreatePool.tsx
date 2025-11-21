@@ -374,6 +374,9 @@ export default function CreatePool() {
                       onChange={(e) => setBaseFee(Number(e.target.value))}
                       className="w-full accent-[#00ffff]"
                     />
+                    <div className="text-xs text-muted-foreground mt-2">
+                      Applied when bringing the pool to Equilibrium
+                    </div>
                   </div>
                 </div>
                 <div className="md:col-span-1">
@@ -394,6 +397,9 @@ export default function CreatePool() {
                       onChange={(e) => setKinkingFee(Number(e.target.value))}
                       className="w-full accent-[#ff00ff]"
                     />
+                    <div className="text-xs text-muted-foreground mt-2">
+                      Applied when pushing away from Equilibrium
+                    </div>
                   </div>
                 </div>
               </div>
