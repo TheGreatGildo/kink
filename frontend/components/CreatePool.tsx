@@ -1,10 +1,28 @@
 "use client";
 
-import { MouseEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { FACTORY_ADDRESS } from "../config/chains";
 import { Button } from "./ui/button";
 import { CreateIcon } from "./Icons";
+import {
+  Chart as ChartJS,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  ChartOptions,
+} from "chart.js";
+import dynamic from "next/dynamic";
+
+// Dynamically import Scatter with no SSR
+const Scatter = dynamic(
+  () => import("react-chartjs-2").then((mod) => mod.Scatter),
+  { ssr: false }
+);
+
+ChartJS.register(LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 const FACTORY_ABI = [
   {
@@ -24,80 +42,43 @@ const FACTORY_ABI = [
 ] as const;
 
 const N_COINS = 2;
-const MAX_ITERATIONS = 255;
-const EPSILON = 1e-9;
 
 type Balances = [number, number];
 
-const getInvariant = (xp: Balances, amp: number) => {
-  const S = xp[0] + xp[1];
-  if (S === 0) return 0;
+const get_y_D = (A: number, i: number, xp: Balances, D: number) => {
+  // i is index to solve for (0 or 1)
+  // xp contains balances. We use the one that is NOT i.
+  // If i=1 (solve y), input is xp[0] (x).
 
-  let D = S;
-  const Ann = amp * N_COINS;
+  let x_input = i === 0 ? xp[1] : xp[0];
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    let D_P = D;
-    for (let j = 0; j < N_COINS; j++) {
-      const denom = xp[j] * N_COINS + EPSILON;
-      D_P = (D_P * D) / denom;
-    }
-    const D_prev = D;
-    const numerator = (Ann * S + D_P * N_COINS) * D;
-    const denominator = (Ann - 1) * D + (N_COINS + 1) * D_P;
-    D = numerator / (denominator || EPSILON);
-
-    if (Math.abs(D - D_prev) <= EPSILON) {
-      break;
-    }
-  }
-
-  return D;
-};
-
-const getY = (i: number, j: number, x: number, xp: Balances, amp: number) => {
-  const D = getInvariant(xp, amp);
-  if (D === 0) return 0;
+  // Safety check for x_input
+  if (x_input <= 0) x_input = 0.000001; // Prevent division by zero
 
   let c = D;
-  let S_ = 0;
-  const Ann = amp * N_COINS;
+  const S_ = x_input;
+  const Ann = A * N_COINS;
 
-  for (let idx = 0; idx < N_COINS; idx++) {
-    if (idx === j) continue;
-    const _x = idx === i ? x : xp[idx];
-    S_ += _x;
-    c = (c * D) / (_x * N_COINS + EPSILON);
-  }
+  // c = c * D / (x * 2)
+  c = (c * D) / (x_input * N_COINS);
 
-  c = (c * D) / (Ann * N_COINS + EPSILON);
+  c = (c * D) / (Ann * N_COINS);
   const b = S_ + D / Ann;
   let y = D;
 
-  for (let _i = 0; _i < MAX_ITERATIONS; _i++) {
+  for (let k = 0; k < 255; k++) {
     const y_prev = y;
-    y = (y * y + c) / (2 * y + b - D + EPSILON);
-    if (Math.abs(y - y_prev) <= EPSILON) {
-      break;
-    }
+    y = (y * y + c) / (2 * y + b - D);
+    if (Math.abs(y - y_prev) <= 1) return y; // Tolerance of 1 wei equivalent
   }
-
   return y;
 };
 
-const getPrices = (balances: Balances, amp: number) => {
-  const dx = 1e-6;
-  const xp: Balances = [balances[0], balances[1]];
-  const xNew = xp[0] + dx;
-  const yNew = getY(0, 1, xNew, xp, amp);
-  const dy = xp[1] - yNew;
-  const priceAinB = dy / dx;
-  const priceBinA = priceAinB !== 0 ? 1 / priceAinB : 0;
-
-  return {
-    priceAinB,
-    priceBinA,
-  };
+const calculatePrice = (x: number, A: number, D: number, dx = 1) => {
+  const y1 = get_y_D(A, 1, [x, 0], D);
+  const y2 = get_y_D(A, 1, [x + dx, 0], D);
+  const dy = y1 - y2;
+  return dy / dx;
 };
 
 export default function CreatePool() {
@@ -134,91 +115,176 @@ export default function CreatePool() {
     });
   };
 
-  const [hoverPoint, setHoverPoint] = useState<{
-    xValue: number;
-    yValue: number;
-    priceAinB: number;
-    priceBinA: number;
-    x: number;
-    y: number;
-  } | null>(null);
+  // Fixed Liquidity D for preview visualization
+  const D = 2000;
 
-  const GRAPH_WIDTH = 250;
-  const GRAPH_HEIGHT = 250;
-  const GRAPH_PADDING = 45;
+  const { points, equilibriumPoints, priceA0, priceA1 } = useMemo(() => {
+    const mid = D / 2;
+    const newPoints: { x: number; y: number }[] = [];
+    const numSteps = 300;
 
-  const curveData = useMemo(() => {
-    const refBalances: Balances = [1, 1]; // D ~= 2
-    // Range around equilibrium. x from 0.1 to 2.0 roughly.
-    // If D=2, x can go up to nearly 2.
-    const samples = 100;
-    const minX = 0.05;
-    const maxX = 1.95;
+    // Part 1: Left of equilibrium (x < mid, so y > x, use A1)
+    // We need to ensure points are sorted by x for Chart.js to draw lines correctly
 
-    const rawPoints: {
-      xValue: number;
-      yValue: number;
-      priceAinB: number;
-      priceBinA: number;
-    }[] = [];
+    // Generate Part 1 points (x from 0 to mid)
+    for (let i = 0; i <= numSteps / 2; i++) {
+      const t = i / (numSteps / 2);
+      let x = t * mid;
+      if (x < 0.01) x = 0.01; // Avoid 0
 
-    for (let i = 0; i <= samples; i++) {
-      const xValue = minX + ((maxX - minX) * i) / samples;
-      // Determine amplification based on current x vs implied y
-      // We can cheat slightly: calculate y with A0, check ratio, correct if needed.
-      // Actually, simpler:
-      // If x > 1 (assuming D=2 equilibrium at 1,1), we are heavy A, so use A0.
-      // If x < 1, we are heavy B, use A1.
-      const amp = xValue >= 1 ? Number(A0) : Number(A1);
-
-      // Calculate y given x and the equilibrium invariant
-      const yValue = getY(0, 1, xValue, refBalances, amp);
-
-      const balances: Balances = [xValue, yValue];
-      const { priceAinB, priceBinA } = getPrices(balances, amp);
-      rawPoints.push({ xValue, yValue, priceAinB, priceBinA });
+      const y = get_y_D(A1, 1, [x, 0], D);
+      newPoints.push({ x, y });
     }
 
-    // Plot mapping
-    // X axis: Token B Balance (0 to 2) - bottom
-    // Y axis: Token A Balance (0 to 2) - left
-    const rangeX = 2; // slightly larger than D
-    const rangeY = 2;
+    // Part 2: Right of equilibrium (x > mid, so x > y, use A0)
+    let x = mid;
+    // Avoid duplicate point at mid if already added
+    if (newPoints.length > 0 && Math.abs(newPoints[newPoints.length - 1].x - x) < 0.001) {
+        x += D / 100;
+    }
 
-    const EXAGGERATION_FACTOR = 1.2; // Adjust this to tune the effect
+    let y = get_y_D(A0, 1, [x, 0], D);
+    let step = D / 100;
+    const maxSteps = 500;
+    let count = 0;
 
-    return rawPoints.map((point) => {
-      // Swap: xValue (Token A) goes to Y axis, yValue (Token B) goes to X axis
-      const xNorm = point.yValue / rangeX; // Token B on X axis
-      const yNorm = point.xValue / rangeY; // Token A on Y axis
+    // Continue generating points
+    while (y > 1 && count < maxSteps) {
+      count++;
+      // Calculate y first before pushing to ensure valid pair
+      y = get_y_D(A0, 1, [x, 0], D);
+      newPoints.push({ x, y });
 
-      const x = GRAPH_PADDING + xNorm * (GRAPH_WIDTH - GRAPH_PADDING * 2);
-      // Apply slight exaggeration to Y to emphasize the kink/tail
-      const yExaggerated =
-        0.5 + (yNorm - 0.5) * EXAGGERATION_FACTOR;
+      x += step;
+      if (count > 50) step = D / 50;
+      if (count > 100) step = D / 20;
+    }
 
-      const y =
-        GRAPH_HEIGHT -
-        GRAPH_PADDING -
-        Math.max(0, Math.min(1, yExaggerated)) * (GRAPH_HEIGHT - GRAPH_PADDING * 2);
+    const newEquilibriumPoints = [
+      { x: 0, y: 0 },
+      { x: Math.max(mid * 2.5, D), y: Math.max(mid * 2.5, D) },
+    ];
+
+    // Prices
+    const x_a1 = D * 0.25;
+    const p_a1 = calculatePrice(x_a1, A1, D);
+
+    const x_a0 = D * 0.75;
+    const p_a0 = calculatePrice(x_a0, A0, D);
 
       return {
-        xValue: point.xValue,
-        yValue: point.yValue,
-        priceAinB: point.priceAinB,
-        priceBinA: point.priceBinA,
-        x,
-        y,
-      };
-    });
-  }, [A0, A1]);
+      points: newPoints,
+      equilibriumPoints: newEquilibriumPoints,
+      priceA1: p_a1,
+      priceA0: p_a0,
+    };
+  }, [A0, A1, D]);
 
-  const generateKinkPath = () =>
-    curveData.length > 0
-      ? curveData
-          .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x},${point.y}`)
-          .join(" ")
-      : "";
+  const chartOptions: ChartOptions<"scatter"> = {
+    responsive: true,
+    maintainAspectRatio: true, // Enforce aspect ratio
+    aspectRatio: 1, // Square aspect ratio (1:1)
+    animation: {
+      duration: 0,
+    },
+    scales: {
+      x: {
+        type: "linear",
+        position: "bottom",
+        title: {
+          display: true,
+          text: "Token A Balance",
+          color: "#9ca3af", // text-gray-400
+        },
+        grid: {
+          color: "rgba(255, 255, 255, 0.1)",
+        },
+        ticks: {
+          color: "#9ca3af",
+          stepSize: 500,
+        },
+        min: 0,
+        max: 3000,
+      },
+      y: {
+        title: {
+          display: true,
+          text: "Token B Balance",
+          color: "#9ca3af",
+        },
+        grid: {
+          color: "rgba(255, 255, 255, 0.1)",
+        },
+        ticks: {
+          color: "#9ca3af",
+          stepSize: 500,
+        },
+        min: 0,
+        max: 3000,
+      },
+    },
+    plugins: {
+      legend: {
+        labels: {
+          color: "#e5e7eb", // text-gray-200
+        },
+      },
+        tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.8)",
+        titleColor: "#fff",
+        bodyColor: "#fff",
+        callbacks: {
+          label: function (context) {
+            const x = context.parsed.x ?? 0;
+            const y = context.parsed.y ?? 0;
+
+            // Recalculate local price
+            // Determine local A based on position relative to equilibrium
+            // If x > y, we are in A0 territory (Token A heavy)
+            // If y > x, we are in A1 territory (Token B heavy)
+            const isHeavyA = x > y;
+            const localA = isHeavyA ? A0 : A1;
+
+            // Calculate price at this exact point
+            const price = calculatePrice(x, localA, D);
+            const priceInv = price > 0 ? 1 / price : 0;
+
+            return [
+              `Bal A: ${x.toFixed(2)}`,
+              `Bal B: ${y.toFixed(2)}`,
+              `Price A/B: ${price.toFixed(4)}`,
+              `Price B/A: ${priceInv.toFixed(4)}`
+            ];
+          },
+        },
+      },
+    },
+  };
+
+  const chartData = {
+    datasets: [
+      {
+        label: "Invariant Curve",
+        data: points,
+        borderColor: "rgb(0, 255, 255)", // Cyan #00ffff
+        backgroundColor: "rgba(0, 255, 255, 0.1)",
+        showLine: true,
+        pointRadius: 1, // Increase from 0 to 1 to make it visible
+        borderWidth: 3,
+        tension: 0.2,
+        spanGaps: true, // Ensure lines are connected if there are any gaps
+      },
+      {
+        label: "Equilibrium (x=y)",
+        data: equilibriumPoints,
+        borderColor: "rgba(255, 0, 255, 0.5)", // Magenta #ff00ff
+        borderDash: [5, 5],
+        showLine: true,
+        pointRadius: 0,
+        borderWidth: 1,
+      },
+    ],
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto rounded-2xl border border-border/60 bg-card p-6 layered-shadow-lg">
@@ -233,201 +299,31 @@ export default function CreatePool() {
       <div className="flex flex-col gap-4">
         {/* Full width graph */}
         <div className="rounded-xl border border-border/50 bg-muted/40 p-6 w-full overflow-hidden relative">
-          <h3 className="text-xl font-semibold mb-4 text-[#00ffff]">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-semibold text-[#00ffff]">
             Kink Curve Preview
           </h3>
-          <div
-            style={{ width: "100%", height: `700px` }}
-            className="relative"
-          >
-            <svg
-              viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
-              style={{ width: "100%", height: "100%" }}
-              preserveAspectRatio="none"
-            >
-              {/* Grid lines */}
-              <defs>
-                <linearGradient
-                  id="kinkGradient"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="0%"
-                >
-                  <stop offset="0%" stopColor="#00ffff" />
-                  <stop offset="100%" stopColor="#ff00ff" />
-                </linearGradient>
-                <clipPath id="kinkClip">
-                  <rect
-                    x="5"
-                    y="5"
-                    width={GRAPH_WIDTH - 10}
-                    height={GRAPH_HEIGHT - 30}
-                    rx="18"
-                  />
-                </clipPath>
-                <filter id="glow">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                  <feMerge>
-                    <feMergeNode in="coloredBlur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-
-              {/* Axes */}
-              {/* X axis (bottom) - Balance B */}
-              <line
-                x1={GRAPH_PADDING}
-                y1={GRAPH_HEIGHT - GRAPH_PADDING}
-                x2={GRAPH_WIDTH - GRAPH_PADDING}
-                y2={GRAPH_HEIGHT - GRAPH_PADDING}
-                stroke="rgba(47,26,60,0.2)"
-                strokeWidth="1.5"
-              />
-              {/* Y axis (left) - Balance A */}
-              <line
-                x1={GRAPH_PADDING}
-                y1={GRAPH_HEIGHT - GRAPH_PADDING}
-                x2={GRAPH_PADDING}
-                y2={GRAPH_PADDING}
-                stroke="rgba(47,26,60,0.2)"
-                strokeWidth="1.5"
-              />
-              {/* X axis label (bottom) - Balance B */}
-              <text
-                x={GRAPH_WIDTH - GRAPH_PADDING}
-                y={GRAPH_HEIGHT - GRAPH_PADDING + 18}
-                fill="rgb(236, 64, 37)"
-                fontSize="10"
-                textAnchor="end"
-              >
-                Balance B
-              </text>
-              {/* Y axis label (left) - Balance A */}
-              <text
-                x={-(GRAPH_HEIGHT / 2)}
-                y={GRAPH_PADDING - 12}
-                fill="rgb(236, 64, 37)"
-                fontSize="10"
-                transform="rotate(-90)"
-                textAnchor="middle"
-              >
-                Balance A
-              </text>
-
-              {/* The kinked curve */}
-              <g clipPath="url(#kinkClip)">
-                <path
-                  d={generateKinkPath()}
-                  stroke="url(#kinkGradient)"
-                  strokeWidth="4"
-                  fill="none"
-                  filter="url(#glow)"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </g>
-            </svg>
-            <div
-              className="absolute top-0 left-0 w-full h-full"
-              style={{ cursor: "crosshair" }}
-              onMouseMove={(event: MouseEvent<HTMLDivElement>) => {
-                if (!curveData.length) return;
-                const rect = event.currentTarget.getBoundingClientRect();
-
-                // Calculate scale based on actual container size vs SVG viewBox
-                // SVG preserves aspect ratio, so we need to account for that
-                const containerAspect = rect.width / rect.height;
-                const svgAspect = GRAPH_WIDTH / GRAPH_HEIGHT;
-
-                let scaleX: number;
-                let scaleY: number;
-                let offsetX = 0;
-                let offsetY = 0;
-
-                if (containerAspect > svgAspect) {
-                  // Container is wider - SVG is letterboxed
-                  const scaledHeight = rect.width / svgAspect;
-                  offsetY = (scaledHeight - rect.height) / 2;
-                  scaleX = GRAPH_WIDTH / rect.width;
-                  scaleY = GRAPH_HEIGHT / scaledHeight;
-                } else {
-                  // Container is taller - SVG is pillarboxed
-                  const scaledWidth = rect.height * svgAspect;
-                  offsetX = (scaledWidth - rect.width) / 2;
-                  scaleX = GRAPH_WIDTH / scaledWidth;
-                  scaleY = GRAPH_HEIGHT / rect.height;
-                }
-
-                // Convert mouse position to SVG coordinates
-                const mouseSvgX = ((event.clientX - rect.left) + offsetX) * scaleX;
-                const mouseSvgY = ((event.clientY - rect.top) + offsetY) * scaleY;
-
-                // Find nearest point on curve
-                const nearest = curveData.reduce((prev, curr) => {
-                  const prevDist =
-                    (prev.x - mouseSvgX) ** 2 + (prev.y - mouseSvgY) ** 2;
-                  const currDist =
-                    (curr.x - mouseSvgX) ** 2 + (curr.y - mouseSvgY) ** 2;
-                  return currDist < prevDist ? curr : prev;
-                }, curveData[0]);
-                setHoverPoint(nearest);
-              }}
-              onMouseLeave={() => setHoverPoint(null)}
-            />
-            {hoverPoint && (
-              <>
-                <svg
-                  viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    pointerEvents: "none",
-                  }}
-                  preserveAspectRatio="none"
-                >
-                  <circle
-                    cx={hoverPoint.x}
-                    cy={hoverPoint.y}
-                    r={5}
-                    fill="#fff"
-                    stroke="#ff00ff"
-                    strokeWidth="2"
-                  />
-                </svg>
-                <div
-                  className="absolute bg-card text-foreground text-sm px-3 py-2 rounded-xl shadow-lg border border-border/50"
-                  style={{
-                    left: `${Math.min(
-                      ((hoverPoint.x + 25) / GRAPH_WIDTH) * 100,
-                      ((GRAPH_WIDTH - GRAPH_PADDING) / GRAPH_WIDTH) * 100
-                    )}%`,
-                    top: `${Math.max(
-                      ((hoverPoint.y - 45) / GRAPH_HEIGHT) * 100,
-                      (GRAPH_PADDING / 2 / GRAPH_HEIGHT) * 100
-                    )}%`,
-                  }}
-                >
-                  <div className="font-semibold text-muted-foreground uppercase text-xs">
-                    Snapshot
+            <div className="flex gap-4 text-sm">
+              <div className="flex flex-col items-end">
+                <span className="text-muted-foreground">Price (A1 Zone)</span>
+                <span className="font-mono font-bold text-[#ff00ff]">
+                  {priceA1.toFixed(4)}
+                </span>
                   </div>
-                  <div>Bal A: {hoverPoint.xValue.toFixed(2)}</div>
-                  <div>Bal B: {hoverPoint.yValue.toFixed(2)}</div>
-                  <div>
-                    Price A→B: {hoverPoint.priceAinB.toFixed(4)}
+              <div className="flex flex-col items-end">
+                <span className="text-muted-foreground">Price (A0 Zone)</span>
+                <span className="font-mono font-bold text-[#00ffff]">
+                  {priceA0.toFixed(4)}
+                </span>
                   </div>
-                  <div>
-                    Price B→A: {hoverPoint.priceBinA.toFixed(4)}
                   </div>
                 </div>
-              </>
-            )}
+
+          <div className="relative w-full max-w-[600px] mx-auto aspect-square">
+            <Scatter data={chartData} options={chartOptions} />
           </div>
         </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
           {/* Info card column */}
           <div className="lg:col-span-1">
@@ -476,7 +372,7 @@ export default function CreatePool() {
                       max="100"
                       value={baseFee}
                       onChange={(e) => setBaseFee(Number(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-[#00ffff]"
                     />
                   </div>
                 </div>
@@ -496,7 +392,7 @@ export default function CreatePool() {
                       max="100"
                       value={kinkingFee}
                       onChange={(e) => setKinkingFee(Number(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-[#ff00ff]"
                     />
                   </div>
                 </div>
@@ -530,16 +426,18 @@ export default function CreatePool() {
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="500"
+                  min="2"
+                  max="1000"
                   value={A0}
                   onChange={(e) => setA0(Number(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-[#00ffff]"
                 />
                 <div className="flex justify-between text-sm text-muted-foreground mt-2">
-                  <span>10</span>
-                  <span className="text-muted-foreground/70">More stable when A is heavy</span>
-                  <span>500</span>
+                  <span>2</span>
+                  <span className="text-muted-foreground/70">
+                    More stable when A is heavy
+                  </span>
+                  <span>1000</span>
                 </div>
               </div>
             </div>
@@ -568,16 +466,18 @@ export default function CreatePool() {
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="500"
+                  min="2"
+                  max="1000"
                   value={A1}
                   onChange={(e) => setA1(Number(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-[#ff00ff]"
                 />
                 <div className="flex justify-between text-sm text-muted-foreground mt-2">
-                  <span>10</span>
-                  <span className="text-muted-foreground/70">More stable when B is heavy</span>
-                  <span>500</span>
+                  <span>2</span>
+                  <span className="text-muted-foreground/70">
+                    More stable when B is heavy
+                  </span>
+                  <span>1000</span>
                 </div>
               </div>
             </div>
