@@ -14,6 +14,7 @@ import Header from '../components/Header';
 import BackgroundParticles from '../components/BackgroundParticles';
 import './globals.css';
 import './milady.css';
+import { Suspense } from 'react';
 
 const queryClient = new QueryClient();
 
@@ -28,7 +29,9 @@ export default function RootLayout({
         <ThemeProvider>
           <AppProviders>
             <BackgroundParticles />
-            <Header />
+            <Suspense fallback={<div className="h-20" />}>
+              <Header />
+            </Suspense>
             {children}
           </AppProviders>
         </ThemeProvider>
