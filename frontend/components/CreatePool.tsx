@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { FACTORY_ADDRESS } from "../config/chains";
+import { FACTORY_ADDRESS, CEFI_TOKEN_ADDRESS, DEFI_TOKEN_ADDRESS } from "../config/chains";
 import { Button } from "./ui/button";
 import { CreateIcon } from "./Icons";
+import { TokenSelector } from "./TokenSelector";
 import {
   Chart as ChartJS,
   LinearScale,
@@ -82,8 +83,8 @@ const calculatePrice = (x: number, A: number, D: number, dx = 1) => {
 };
 
 export default function CreatePool() {
-  const [tokenA, setTokenA] = useState("");
-  const [tokenB, setTokenB] = useState("");
+  const [tokenA, setTokenA] = useState(CEFI_TOKEN_ADDRESS);
+  const [tokenB, setTokenB] = useState(DEFI_TOKEN_ADDRESS);
   const [A0, setA0] = useState(100);
   const [A1, setA1] = useState(200);
   const [baseFee, setBaseFee] = useState(4);
@@ -412,15 +413,10 @@ export default function CreatePool() {
           <div className="lg:col-span-1">
             <div className="flex flex-col gap-4 h-full">
               <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
-                <label className="block text-base font-semibold text-foreground mb-3">
-                  Token A Address
-                </label>
-                <input
-                  type="text"
+                <TokenSelector
+                  label="Token A Address (CeFi)"
                   value={tokenA}
-                  onChange={(e) => setTokenA(e.target.value)}
-                  className="w-full text-lg bg-input border border-border rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring/50"
-                  placeholder="0x..."
+                  onChange={setTokenA}
                 />
               </div>
               <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
@@ -452,15 +448,10 @@ export default function CreatePool() {
           <div className="lg:col-span-1">
             <div className="flex flex-col gap-4 h-full">
               <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
-                <label className="block text-base font-semibold text-foreground mb-3">
-                  Token B Address
-                </label>
-                <input
-                  type="text"
+                <TokenSelector
+                  label="Token B Address (DeFi)"
                   value={tokenB}
-                  onChange={(e) => setTokenB(e.target.value)}
-                  className="w-full text-lg bg-input border border-border rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring/50"
-                  placeholder="0x..."
+                  onChange={setTokenB}
                 />
               </div>
               <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
