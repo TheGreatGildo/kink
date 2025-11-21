@@ -53,6 +53,7 @@ export function useTokenBalance(tokenAddress: string | undefined) {
   return {
     balance,
     formattedBalance,
+    refetchBalance: rest.refetch,
     ...rest,
   };
 }

@@ -12,6 +12,7 @@ import { PoolStats } from './PoolStats';
 import { DEPLOYED_POOL } from '../config/chains';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils/cn';
+import { LiquidityIcon } from './Icons';
 
 const POOL_ABI = [
   {
@@ -478,7 +479,7 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
       {/* Header */}
       <div className="flex flex-col items-center gap-3 mb-6 text-center">
         <div className="flex items-center gap-3">
-          <span className="text-5xl">𐦒</span>
+          <LiquidityIcon className="w-12 h-12 text-[#ff00ff]" />
           <h2 className="text-4xl font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">Liquidity</h2>
         </div>
         <div className="rounded-xl border border-border/50 bg-muted/40 px-4 py-2">

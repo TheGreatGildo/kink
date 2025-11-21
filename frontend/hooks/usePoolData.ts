@@ -66,7 +66,7 @@ const KINK_POOL_ABI = [
 ] as const;
 
 export function usePoolData(poolAddress: string | undefined) {
-  const { data: reserves } = useReadContract({
+  const { data: reserves, refetch: refetchReserves } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'getReserves',
@@ -75,7 +75,7 @@ export function usePoolData(poolAddress: string | undefined) {
     },
   });
 
-  const { data: token0, error: token0Error } = useReadContract({
+  const { data: token0, error: token0Error, refetch: refetchToken0 } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'token0',
@@ -84,7 +84,7 @@ export function usePoolData(poolAddress: string | undefined) {
     },
   });
 
-  const { data: token1, error: token1Error } = useReadContract({
+  const { data: token1, error: token1Error, refetch: refetchToken1 } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'token1',
@@ -106,7 +106,7 @@ export function usePoolData(poolAddress: string | undefined) {
     }
   }, [poolAddress, token0, token1, token0Error, token1Error]);
 
-  const { data: A0 } = useReadContract({
+  const { data: A0, refetch: refetchA0 } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'A0',
@@ -115,7 +115,7 @@ export function usePoolData(poolAddress: string | undefined) {
     },
   });
 
-  const { data: A1 } = useReadContract({
+  const { data: A1, refetch: refetchA1 } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'A1',
@@ -124,7 +124,7 @@ export function usePoolData(poolAddress: string | undefined) {
     },
   });
 
-  const { data: baseFee } = useReadContract({
+  const { data: baseFee, refetch: refetchBaseFee } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'baseFee',
@@ -133,7 +133,7 @@ export function usePoolData(poolAddress: string | undefined) {
     },
   });
 
-  const { data: kinkingFee } = useReadContract({
+  const { data: kinkingFee, refetch: refetchKinkingFee } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'kinkingFee',
@@ -142,7 +142,7 @@ export function usePoolData(poolAddress: string | undefined) {
     },
   });
 
-  const { data: totalSupply } = useReadContract({
+  const { data: totalSupply, refetch: refetchTotalSupply } = useReadContract({
     address: poolAddress as `0x${string}`,
     abi: KINK_POOL_ABI,
     functionName: 'totalSupply',
@@ -162,6 +162,19 @@ export function usePoolData(poolAddress: string | undefined) {
   const token0Address = token0 ? String(token0).toLowerCase() : undefined;
   const token1Address = token1 ? String(token1).toLowerCase() : undefined;
 
+  const refetch = async () => {
+    await Promise.all([
+      refetchReserves(),
+      refetchToken0(),
+      refetchToken1(),
+      refetchA0(),
+      refetchA1(),
+      refetchBaseFee(),
+      refetchKinkingFee(),
+      refetchTotalSupply(),
+    ]);
+  };
+
   return {
     reserves: reserves ? { reserve0: reserves[0], reserve1: reserves[1] } : null,
     token0: token0Address,
@@ -172,6 +185,7 @@ export function usePoolData(poolAddress: string | undefined) {
     kinkingFee,
     totalSupply,
     currentPrice,
+    refetch,
   };
 }
 

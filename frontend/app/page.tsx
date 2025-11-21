@@ -8,8 +8,10 @@ import { usePools } from '../hooks/usePools';
 import CreatePool from '../components/CreatePool';
 import Swap from '../components/Swap';
 import Liquidity from '../components/Liquidity';
+import Faucet from '../components/Faucet';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { PoolCard } from '../components/PoolCard';
+import { PoolsIcon, CreateIcon, SwapIcon, LiquidityIcon, FaucetIcon } from '../components/Icons';
 
 const PARTICLE_POSITIONS = Array.from({ length: 20 }, () => ({
   left: Math.random() * 100,
@@ -22,15 +24,16 @@ export default function Home() {
   const { isConnected } = useAccount();
   const { pools, loading } = usePools(FACTORY_ADDRESS);
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'pools' | 'create' | 'swap' | 'liquidity'>('pools');
+  const [activeTab, setActiveTab] = useState<'pools' | 'create' | 'swap' | 'liquidity' | 'faucet'>('pools');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const tabs = useMemo(
     () => [
-      { id: 'pools' as const, label: 'Pools', icon: '𓂺' },
-      { id: 'create' as const, label: 'Create', icon: '☞︎☜︎' },
-      { id: 'swap' as const, label: 'Swap', icon: '𓁔' },
-      { id: 'liquidity' as const, label: 'Liquidity', icon: '𐦒' },
+      { id: 'pools' as const, label: 'Pools', icon: <PoolsIcon className="w-5 h-5" /> },
+      { id: 'create' as const, label: 'Create', icon: <CreateIcon className="w-5 h-5" /> },
+      { id: 'swap' as const, label: 'Swap', icon: <SwapIcon className="w-5 h-5" /> },
+      { id: 'liquidity' as const, label: 'Liquidity', icon: <LiquidityIcon className="w-5 h-5" /> },
+      { id: 'faucet' as const, label: 'Faucet', icon: <FaucetIcon className="w-5 h-5" /> },
     ],
     []
   );
@@ -186,7 +189,7 @@ export default function Home() {
               {(activeTab === 'pools' || (!selectedPool && (activeTab === 'swap' || activeTab === 'liquidity'))) && (
                 <div className="w-full glass-card p-6 md:p-12 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="flex items-center justify-center gap-4 mb-10">
-                    <span className="text-5xl">𓂺</span>
+                    <PoolsIcon className="w-12 h-12 text-[#ff00ff]" />
                     <h2 className="text-4xl font-bold gradient-text text-center">
                       {activeTab === 'pools' ? 'Liquidity Pools' : 'Select a Pool'}
                     </h2>
@@ -198,7 +201,9 @@ export default function Home() {
                     </div>
                   ) : pools.length === 0 ? (
                     <div className="py-16 text-center">
-                      <div className="mb-6 text-7xl">🏊‍♂️</div>
+                      <div className="mb-6 flex justify-center">
+                        <PoolsIcon className="w-20 h-20 text-muted-foreground/50" />
+                      </div>
                       <p className="mb-4 text-2xl text-foreground">No pools found</p>
                       <p className="mb-8 text-lg text-muted-foreground">
                         Create the first kinky pool to get started!
@@ -233,6 +238,8 @@ export default function Home() {
               {activeTab === 'swap' && selectedPool && <div className="w-full flex justify-center"><Swap poolAddress={selectedPool} /></div>}
 
               {activeTab === 'liquidity' && selectedPool && <div className="w-full flex justify-center"><Liquidity poolAddress={selectedPool} /></div>}
+
+              {activeTab === 'faucet' && <div className="w-full flex justify-center"><Faucet /></div>}
             </div>
           </div>
         )}

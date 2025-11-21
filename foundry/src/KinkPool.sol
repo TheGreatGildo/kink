@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
@@ -188,47 +187,65 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
 
         uint256[N_COINS] memory xpBefore = _xp(reservesBefore);
 
-        // Check if swap crosses equilibrium
+        // Calculate D using current state to determine crossing point
+        uint256 currentA = _get_current_A();
+        uint256 D = CurveMath.get_D(xpBefore, currentA);
+        uint256 thresholdXP = D / N_COINS;
+
+        // Check if swap crosses equilibrium (1:1 point)
         bool crossesEquilibrium = false;
-        uint256 gap = 0;
         uint256 dx1 = 0;
         uint256 dx2 = 0;
 
-        if (i == 0 && j == 1) {
-            // Swapping token0 -> token1
-            if (inputBalanceBefore < outputBalanceBefore) {
-                gap = outputBalanceBefore - inputBalanceBefore;
-                if (actualDx > gap) {
+        if (xpBefore[i] < xpBefore[j]) {
+            // Currently converging (xp[i] < xp[j])
+            // Check if we cross the threshold (D/2)
+            uint256 dxNormalized = actualDx * tokenMultipliers[i];
+            if (xpBefore[i] + dxNormalized > thresholdXP) {
+                // Check if we actually cross (avoid precision issues if very close)
+                // If xpBefore[i] + dxNormalized > thresholdXP, we MIGHT cross.
+                // The gap to reach D/2 is (thresholdXP - xpBefore[i]).
+                uint256 gapNormalized = thresholdXP - xpBefore[i];
+
+                // dx1 is the input required to reach equilibrium
+                // Since input is added to pool, increasing x, we just fill the gap to D/2.
+                // Note: this is an approximation for the split point because D is invariant.
+
+                uint256 gapDx = gapNormalized / tokenMultipliers[i];
+                if (gapDx < actualDx) {
                     crossesEquilibrium = true;
-                    dx1 = gap;
-                    dx2 = actualDx - gap;
-                }
-            }
-        } else if (i == 1 && j == 0) {
-            // Swapping token1 -> token0
-            if (outputBalanceBefore < inputBalanceBefore) {
-                gap = inputBalanceBefore - outputBalanceBefore;
-                if (actualDx > gap) {
-                    crossesEquilibrium = true;
-                    dx1 = gap;
-                    dx2 = actualDx - gap;
+                    dx1 = gapDx;
+                    dx2 = actualDx - gapDx;
                 }
             }
         }
 
         if (crossesEquilibrium) {
-            // Split swap: first part converges (0% fee), second part diverges (kinkingFee)
-            uint256 currentA = _get_current_A();
+            // Split swap: first part converges (baseFee), second part diverges (kinkingFee)
+            // First part: swap dx1
             uint256[N_COINS] memory xp1 = xpBefore;
             uint256 dx1Normalized = dx1 * tokenMultipliers[i];
             uint256 x1 = xp1[i] + dx1Normalized;
             uint256 y1 = CurveMath.get_y(i, j, x1, xp1, currentA);
             uint256 dy1Normalized = xp1[j] - y1;
+
+            // Apply baseFee to the converging part
+            uint256 dy1Fee = (dy1Normalized * baseFee) / FEE_DENOMINATOR;
+            dy1Normalized -= dy1Fee;
+
             uint256 dy1 = dy1Normalized / tokenMultipliers[j];
 
             // Update balances to reflect first swap outcome
             xp1[i] = x1;
-            xp1[j] = y1;
+            xp1[j] = xpBefore[j] - dy1Normalized; // Important: reduce by actual output without fee?
+            // Wait, xp1[j] should represent the internal "ideal" balance before fee was taken out?
+            // Actually, for calculating the next step, we should assume the pool has LESS tokens (the output was removed).
+            // The fee remains in the pool.
+            // So pool balance = old_y - dy_user = old_y - (dy - fee) = y + fee.
+            // y1 is the theoretical new balance if no fee.
+            // So we set xp1[j] = y1 + dy1Fee.
+
+            xp1[j] = y1 + dy1Fee;
 
             // Second swap with target A (opposite side)
             uint256 targetA = i == 0 ? A1 : A0;
@@ -238,10 +255,7 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
             uint256 y2 = CurveMath.get_y(i, j, x2, xp2, targetA);
             uint256 dy2Normalized = xp2[j] - y2;
 
-            xp2[i] = x2;
-            xp2[j] = y2;
-
-            // Apply fee on the normalized output delta
+            // Apply kinkingFee to the diverging part
             uint256 dy2Fee = (dy2Normalized * kinkingFee) / FEE_DENOMINATOR;
             dy2Normalized -= dy2Fee;
 
@@ -249,19 +263,21 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
             dy = dy1 + dy2;
         } else {
             // Standard swap
-            uint256 currentA = _get_current_A();
-            uint256 dxNormalized = actualDx * tokenMultipliers[i];
-            uint256 x = xpBefore[i] + dxNormalized;
+            // Check convergence based on PRE-SWAP state
+            // If we didn't cross, the entire swap is either converging or diverging based on start state.
+            // Exception: if we were EXACTLY at equilibrium?
+            // If xp[i] == xp[j], we are diverging immediately.
 
-            // Determine if converging or diverging
             bool converging = false;
-            if (i == 0 && j == 1) {
-                converging = reservesBefore[0] > reservesBefore[1];
-            } else {
-                converging = reservesBefore[1] > reservesBefore[0];
+            if (xpBefore[i] < xpBefore[j]) {
+                converging = true;
             }
+            // If equal or greater, converging = false (diverging).
 
             uint256 fee = converging ? baseFee : kinkingFee;
+
+            uint256 dxNormalized = actualDx * tokenMultipliers[i];
+            uint256 x = xpBefore[i] + dxNormalized;
             uint256 y = CurveMath.get_y(i, j, x, xpBefore, currentA);
             uint256 dyNormalized = xpBefore[j] - y;
 
@@ -442,4 +458,3 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         return y;
     }
 }
-

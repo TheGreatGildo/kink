@@ -46,14 +46,12 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
   const interestEarned = lpPrice > 0 ? (lpPrice - 1) * 100 : 0;
 
   // Fee Rate
-  // baseFee is usually scaled. Assuming 1e18 based on wagmi common patterns, but might be 1e4 for bps
-  // If the hardcoded value was 0.04%, that's 4bps or 0.0004.
-  // Let's assume the contract returns it in 1e18 (standard for math in solidity).
-  // If baseFee is 4e14 (0.0004 * 1e18), then formatted is 0.04%.
-  const feeRate = poolData.baseFee ? Number(formatUnits(poolData.baseFee, 16)) : 0.04; // Assuming 1e16 gives percentage (0.04)
+  // baseFee is in basis points (1 bps = 0.01%).
+  // So we just divide by 100 to get the percentage.
+  const feeRate = poolData.baseFee ? Number(poolData.baseFee) / 100 : 0.02;
 
   return (
-    <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4 p-4 mt-6 rounded-xl border border-border/50 bg-muted/20 backdrop-blur-sm">
+    <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-4 p-4 mt-6 rounded-xl border border-border/50 bg-muted/20 backdrop-blur-sm">
       <div className="flex flex-col gap-1">
         <span className="text-xs text-muted-foreground">Total Liquidity</span>
         <div className="font-semibold text-foreground">
@@ -93,6 +91,26 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
         </div>
         <span className="text-xs text-muted-foreground">
           Since Inception
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Amplification (A0)</span>
+        <div className="font-semibold text-foreground">
+          {poolData.A0 ? poolData.A0.toString() : '0'}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {token0Meta.symbol} Heavy
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Amplification (A1)</span>
+        <div className="font-semibold text-foreground">
+          {poolData.A1 ? poolData.A1.toString() : '0'}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {token1Meta.symbol} Heavy
         </span>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { MouseEvent, useMemo, useState } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { FACTORY_ADDRESS } from "../config/chains";
 import { Button } from "./ui/button";
+import { CreateIcon } from "./Icons";
 
 const FACTORY_ABI = [
   {
@@ -223,8 +224,8 @@ export default function CreatePool() {
     <div className="w-full max-w-6xl mx-auto rounded-2xl border border-border/60 bg-card p-6 layered-shadow-lg">
       {/* Header */}
       <div className="flex flex-col md:flex-row items-center justify-center gap-3 mb-6 text-center">
-        <span className="text-5xl">☞︎☜︎</span>
-        <h2 className="text-4xl font-bold bg-gradient-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent text-center">
+        <CreateIcon className="w-12 h-12 text-[#ff00ff]" />
+        <h2 className="text-4xl font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent text-center">
           Create Kinky Pool
         </h2>
       </div>
@@ -465,7 +466,7 @@ export default function CreatePool() {
                       <label className="text-sm font-semibold text-foreground">
                         Base Fee
                       </label>
-                      <span className="text-lg font-bold bg-gradient-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">
+                      <span className="text-lg font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">
                         {(baseFee / 100).toFixed(2)}%
                       </span>
                     </div>
@@ -485,7 +486,7 @@ export default function CreatePool() {
                       <label className="text-sm font-semibold text-foreground">
                         Kinking Fee
                       </label>
-                      <span className="text-lg font-bold bg-gradient-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">
+                      <span className="text-lg font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">
                         {(kinkingFee / 100).toFixed(2)}%
                       </span>
                     </div>
@@ -586,7 +587,7 @@ export default function CreatePool() {
         <Button
           onClick={handleCreatePool}
           disabled={isPending || isConfirming || !tokenA || !tokenB}
-          className="w-full px-4 py-6 text-lg font-bold rounded-xl bg-gradient-to-r from-[#00ffff] to-[#ff00ff] text-black hover:opacity-90 transition-opacity"
+          className="w-full px-4 py-6 text-lg font-bold rounded-xl bg-linear-to-r from-[#00ffff] to-[#ff00ff] text-black hover:opacity-90 transition-opacity"
         >
           {isPending ? (
             <span className="flex items-center justify-center gap-3">
