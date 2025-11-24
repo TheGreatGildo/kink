@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 
-type ThemeMode = 'light' | 'dark' | 'system';
+type ThemeMode = 'light' | 'dark';
 
 interface ThemeContextValue {
   currentTheme: ThemeMode;
@@ -20,55 +20,29 @@ interface ThemeContextValue {
 const STORAGE_KEY = 'kinkdex-theme';
 
 const ThemeContext = createContext<ThemeContextValue>({
-  currentTheme: 'system',
+  currentTheme: 'dark',
   handleModeToggle: () => {},
-  isDarkMode: false,
+  isDarkMode: true,
 });
 
 export const useTheme = () => useContext(ThemeContext);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [currentTheme, setCurrentTheme] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'system';
+    if (typeof window === 'undefined') return 'dark';
     const stored = window.localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-    if (stored === 'light' || stored === 'dark' || stored === 'system') {
+    if (stored === 'light' || stored === 'dark') {
       return stored;
     }
-    return 'system';
-  });
-  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return 'dark';
   });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const mql = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (event: MediaQueryListEvent) => {
-      setSystemPrefersDark(event.matches);
-    };
-
-    mql.addEventListener('change', handleChange);
-    return () => mql.removeEventListener('change', handleChange);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (currentTheme === 'system') {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } else {
-      window.localStorage.setItem(STORAGE_KEY, currentTheme);
-    }
+    window.localStorage.setItem(STORAGE_KEY, currentTheme);
   }, [currentTheme]);
 
-  const isDarkMode = useMemo(() => {
-    return (
-      currentTheme === 'dark' ||
-      (currentTheme === 'system' && systemPrefersDark)
-    );
-  }, [currentTheme, systemPrefersDark]);
+  const isDarkMode = useMemo(() => currentTheme === 'dark', [currentTheme]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;

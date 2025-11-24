@@ -45,73 +45,95 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
   // Interest Earned (Growth from 1.0)
   const interestEarned = lpPrice > 0 ? (lpPrice - 1) * 100 : 0;
 
-  // Fee Rate
-  // baseFee is in basis points (1 bps = 0.01%).
-  // So we just divide by 100 to get the percentage.
-  const feeRate = poolData.baseFee ? Number(poolData.baseFee) / 100 : 0.02;
+  const formatAmplification = (value?: bigint) =>
+    typeof value === 'bigint' ? Number(value).toLocaleString() : '—';
+  const formatSoftPeg = (value?: bigint) =>
+    value && value > 0n ? (Number(value) / 1e18).toFixed(4) : '—';
+  const formatFee = (value?: bigint) =>
+    typeof value === 'bigint' ? `${(Number(value) / 100).toFixed(2)}%` : '—';
+
+  const parameterTiles = [
+    {
+      label: 'Amplification (Token 0)',
+      value: formatAmplification(poolData.A0),
+      hint: token0Meta.symbol ? `${token0Meta.symbol} heavy regime` : undefined,
+    },
+    {
+      label: 'Amplification (Token 1)',
+      value: formatAmplification(poolData.A1),
+      hint: token1Meta.symbol ? `${token1Meta.symbol} heavy regime` : undefined,
+    },
+    {
+      label: 'Soft Peg (Token 0)',
+      value: formatSoftPeg(poolData.softPeg0),
+      hint: token0Meta.symbol,
+    },
+    {
+      label: 'Soft Peg (Token 1)',
+      value: formatSoftPeg(poolData.softPeg1),
+      hint: token1Meta.symbol,
+    },
+    {
+      label: 'Base Fee',
+      value: formatFee(poolData.baseFee),
+      hint: 'applies above soft peg',
+    },
+    {
+      label: 'Kink Fee',
+      value: formatFee(poolData.kinkingFee),
+      hint: 'applies below soft peg',
+    },
+  ];
 
   return (
-    <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-4 p-4 mt-6 rounded-xl border border-border/50 bg-muted/20 backdrop-blur-sm">
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Total Liquidity</span>
-        <div className="font-semibold text-foreground">
-          ${totalLiquidity.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+    <div className="w-full flex flex-col gap-4 mt-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl border border-border/50 bg-muted/20 backdrop-blur-sm">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Total Liquidity</span>
+          <div className="font-semibold text-foreground">
+            ${totalLiquidity.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
+          <div className="text-xs text-muted-foreground flex gap-1 flex-wrap">
+            <span>{reserve0.toLocaleString(undefined, { maximumFractionDigits: 0 })} {token0Meta.symbol}</span>
+            <span>+</span>
+            <span>{reserve1.toLocaleString(undefined, { maximumFractionDigits: 0 })} {token1Meta.symbol}</span>
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground flex gap-1">
-          <span>{reserve0.toLocaleString(undefined, { maximumFractionDigits: 0 })} {token0Meta.symbol}</span>
-          <span>+</span>
-          <span>{reserve1.toLocaleString(undefined, { maximumFractionDigits: 0 })} {token1Meta.symbol}</span>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Pool Ratio</span>
+          <div className="font-semibold text-foreground">
+            {ratio.toFixed(4)}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {token0Meta.symbol} / {token1Meta.symbol}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">LP Return (ROI)</span>
+          <div className={`font-semibold ${interestEarned >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {interestEarned > 0 ? '+' : ''}{interestEarned.toFixed(4)}%
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Since Inception
+          </span>
         </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Pool Ratio</span>
-        <div className="font-semibold text-foreground">
-          {ratio.toFixed(4)}
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {token0Meta.symbol} / {token1Meta.symbol}
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Trading Fee</span>
-        <div className="font-semibold text-[#00ffff]">
-          {feeRate.toFixed(3)}%
-        </div>
-        <span className="text-xs text-muted-foreground">
-          Base Rate
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">LP Return (ROI)</span>
-        <div className={`font-semibold ${interestEarned >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-          {interestEarned > 0 ? '+' : ''}{interestEarned.toFixed(4)}%
-        </div>
-        <span className="text-xs text-muted-foreground">
-          Since Inception
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Amplification (A0)</span>
-        <div className="font-semibold text-foreground">
-          {poolData.A0 ? poolData.A0.toString() : '0'}
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {token0Meta.symbol} Heavy
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Amplification (A1)</span>
-        <div className="font-semibold text-foreground">
-          {poolData.A1 ? poolData.A1.toString() : '0'}
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {token1Meta.symbol} Heavy
-        </span>
+      <div className="grid gap-3 md:grid-cols-3">
+        {parameterTiles.map((tile) => (
+          <div
+            key={tile.label}
+            className="rounded-xl border border-border/40 bg-muted/30 px-4 py-3 text-sm"
+          >
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{tile.label}</p>
+            <p className="text-lg font-semibold text-foreground">{tile.value}</p>
+            {tile.hint && (
+              <p className="text-xs text-muted-foreground mt-1">{tile.hint}</p>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

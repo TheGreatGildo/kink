@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FACTORY_ADDRESS } from '../config/chains';
 import { usePools } from '../hooks/usePools';
 import { PoolCard } from './PoolCard';
 import { PoolsIcon } from './Icons';
@@ -10,7 +9,7 @@ import { PoolsIcon } from './Icons';
 export default function Pools() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { pools, loading } = usePools(FACTORY_ADDRESS);
+  const { pools, loading } = usePools();
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
 
   const returnTo = searchParams.get('returnTo');

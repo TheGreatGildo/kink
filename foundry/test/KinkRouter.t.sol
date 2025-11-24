@@ -4,12 +4,14 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/KinkRouter.sol";
 import "../src/KinkFactory.sol";
+import "../src/PoolRegistry.sol";
 import "../src/KinkPool.sol";
 import "../src/mocks/MockERC20.sol";
 
 contract KinkRouterTest is Test {
     KinkRouter router;
     KinkFactory factory;
+    PoolRegistry registry;
     KinkPool pool;
     MockERC20 token0;
     MockERC20 token1;
@@ -19,15 +21,18 @@ contract KinkRouterTest is Test {
     uint256 constant A1 = 200;
     uint256 constant BASE_FEE = 4;
     uint256 constant KINKING_FEE = 10;
+    uint256 constant SOFT_PEG = 2e18;
 
     function setUp() public {
-        factory = new KinkFactory();
-        router = new KinkRouter(address(factory));
+        registry = new PoolRegistry(address(this), address(0));
+        factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
+        router = new KinkRouter(address(registry));
 
         token0 = new MockERC20("Token0", "T0");
         token1 = new MockERC20("Token1", "T1");
 
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         pool = KinkPool(poolAddress);
 
         // Mint tokens to user
@@ -87,15 +92,15 @@ contract KinkRouterTest is Test {
     }
 
     function testGetAmountsOut_RevertIfInvalidIndices() public {
-        vm.expectRevert("KinkRouter: Invalid indices");
+        vm.expectRevert("KinkPool: Invalid indices");
         router.getAmountsOut(address(pool), 0, 0, 100e18);
 
-        vm.expectRevert("KinkRouter: Invalid indices");
+        vm.expectRevert("KinkPool: Invalid indices");
         router.getAmountsOut(address(pool), 2, 1, 100e18);
     }
 
     function testGetAmountsOut_RevertIfZeroInput() public {
-        vm.expectRevert("KinkRouter: Zero input");
+        vm.expectRevert("KinkPool: Zero input");
         router.getAmountsOut(address(pool), 0, 1, 0);
     }
 

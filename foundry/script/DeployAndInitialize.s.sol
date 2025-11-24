@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/KinkFactory.sol";
 import "../src/KinkRouter.sol";
+import "../src/PoolRegistry.sol";
 import "../src/KinkPool.sol";
 import "../src/mocks/MockERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -35,12 +36,14 @@ contract DeployAndInitialize is Script {
 
         // 1. Deploy Factory
         console.log("\n[1/3] Deploying KinkFactory...");
-        KinkFactory factory = new KinkFactory();
+        PoolRegistry registry = new PoolRegistry(msg.sender, address(0));
+        KinkFactory factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         console.log("[OK] KinkFactory deployed at:", address(factory));
 
         // 2. Deploy Router
         console.log("\n[2/3] Deploying KinkRouter...");
-        KinkRouter router = new KinkRouter(address(factory));
+        KinkRouter router = new KinkRouter(address(registry));
         console.log("[OK] KinkRouter deployed at:", address(router));
 
         // 3. Deploy mock tokens (DEFI & CEFI) for this environment
@@ -57,19 +60,48 @@ contract DeployAndInitialize is Script {
         console.log("Token A (DEFI):", DEFI);
         console.log("Token B (CEFI):", CEFI);
 
-        // Note: Factory sorts tokens; keep same amplification logic as original
-        uint256 A0 = 120;  // Will become A1Param (for when alUSD > USDe, i.e., token1 > token0)
-        uint256 A1 = 500;  // Will become A0Param (for when USDe > alUSD, i.e., token0 > token1)
-        uint256 baseFee = 2;      // 0.02% = 2 basis points
-        uint256 kinkingFee = 16;  // 0.16% = 16 basis points
+        // Note: Factory sorts tokens.
+        // We want A0=1000 when CEFI is heavier, A1=69 when DEFI is heavier.
+        // We need to know which token is which to assign A0/A1 correctly to factory call.
+        // If CEFI < DEFI, then token0=CEFI, token1=DEFI.
+        //   A0Param (token0 > token1) = A(CEFI > DEFI) = 1000
+        //   A1Param (token1 > token0) = A(DEFI > CEFI) = 69
+        // If DEFI < CEFI, then token0=DEFI, token1=CEFI.
+        //   A0Param (token0 > token1) = A(DEFI > CEFI) = 69
+        //   A1Param (token1 > token0) = A(CEFI > DEFI) = 1000
+
+        // We can just define desired A_CEFI_Heavy and A_DEFI_Heavy and let logic handle it?
+        // No, createPool signature is (tokenA, tokenB, _A0, _A1, ...)
+        // Where _A0 is amp when tokenA > tokenB.
+        // So we just pass (CEFI, DEFI, A_CEFI_Heavy, A_DEFI_Heavy, ...)
+
+        uint256 A_CEFI_Heavy = 1000;
+        uint256 A_DEFI_Heavy = 69;
+
+        uint256 baseFee = 4;      // 0.04% = 4 basis points
+        uint256 kinkingFee = 25;  // 0.25% = 25 basis points
+        uint256 softPegCEFI = 0;
+        uint256 softPegDEFI = 0.99e18; // 0.99
 
         console.log("Pool Parameters:");
-        console.log("  A0 (DEFI > CEFI):", A0);
-        console.log("  A1 (CEFI > DEFI):", A1);
-        console.log("  Base Fee:", baseFee, "bp (0.02%)");
-        console.log("  Kinking Fee:", kinkingFee, "bp (0.16%)");
+        console.log("  A (CEFI > DEFI):", A_CEFI_Heavy);
+        console.log("  A (DEFI > CEFI):", A_DEFI_Heavy);
+        console.log("  Base Fee:", baseFee, "bp (0.04%)");
+        console.log("  Kinking Fee:", kinkingFee, "bp (0.25%)");
+        console.log("  Soft Peg CEFI:", softPegCEFI);
+        console.log("  Soft Peg DEFI:", softPegDEFI);
 
-        address pool = factory.createPool(DEFI, CEFI, A0, A1, baseFee, kinkingFee);
+        // createPool(tokenA, tokenB, A(A>B), A(B>A), ...)
+        address pool = factory.createPool(
+            CEFI,
+            DEFI,
+            A_CEFI_Heavy,
+            A_DEFI_Heavy,
+            baseFee,
+            kinkingFee,
+            softPegCEFI,
+            softPegDEFI
+        );
         console.log("[OK] Pool created at:", pool);
 
         // Verify pool initialization

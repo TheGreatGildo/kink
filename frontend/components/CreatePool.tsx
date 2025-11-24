@@ -34,6 +34,8 @@ const FACTORY_ABI = [
       { internalType: "uint256", name: "_A1", type: "uint256" },
       { internalType: "uint256", name: "_baseFee", type: "uint256" },
       { internalType: "uint256", name: "_kinkingFee", type: "uint256" },
+      { internalType: "uint256", name: "_softPeg0", type: "uint256" },
+      { internalType: "uint256", name: "_softPeg1", type: "uint256" },
     ],
     name: "createPool",
     outputs: [{ internalType: "address", name: "pool", type: "address" }],
@@ -85,10 +87,15 @@ const calculatePrice = (x: number, A: number, D: number, dx = 1) => {
 export default function CreatePool() {
   const [tokenA, setTokenA] = useState(CEFI_TOKEN_ADDRESS);
   const [tokenB, setTokenB] = useState(DEFI_TOKEN_ADDRESS);
-  const [A0, setA0] = useState(100);
-  const [A1, setA1] = useState(200);
-  const [baseFee, setBaseFee] = useState(4);
-  const [kinkingFee, setKinkingFee] = useState(10);
+  const [A0, setA0] = useState(1000);
+  const [A1, setA1] = useState(69);
+  const [baseFee, setBaseFee] = useState(5);
+  const [kinkingFee, setKinkingFee] = useState(25);
+
+  const [enableSoftPegA, setEnableSoftPegA] = useState(false);
+  const [enableSoftPegB, setEnableSoftPegB] = useState(true); // Default enabled for Token B (DeFi) in CEFI-DEFI mode
+  const [softPegA, setSoftPegA] = useState(0.98);
+  const [softPegB, setSoftPegB] = useState(0.98);
 
   const { writeContract, data: hash, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
@@ -101,6 +108,12 @@ export default function CreatePool() {
       return;
     }
 
+    // If soft peg is DISABLED, we set it to a very high number (e.g. 100.0)
+    // This ensures price < peg is ALWAYS true, so Kink Fee is ALWAYS applied when diverging.
+    // This matches the "Standard Kink" behavior.
+    const finalPegA = enableSoftPegA ? softPegA : 100;
+    const finalPegB = enableSoftPegB ? softPegB : 100;
+
     writeContract({
       address: FACTORY_ADDRESS as `0x${string}`,
       abi: FACTORY_ABI,
@@ -112,6 +125,8 @@ export default function CreatePool() {
         BigInt(A1),
         BigInt(baseFee),
         BigInt(kinkingFee),
+        BigInt(Math.floor(finalPegA * 1e18)),
+        BigInt(Math.floor(finalPegB * 1e18)),
       ],
     });
   };
@@ -479,6 +494,88 @@ export default function CreatePool() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Soft Peg Configuration */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+            <div className="lg:col-span-1">
+                <div className={`rounded-xl border border-border/50 bg-muted/40 p-6 transition-opacity ${!enableSoftPegA ? 'opacity-70' : ''}`}>
+                    <div className="flex justify-between mb-3 items-center">
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={enableSoftPegA}
+                                onChange={(e) => setEnableSoftPegA(e.target.checked)}
+                                className="w-4 h-4 accent-[#00ffff] cursor-pointer"
+                            />
+                            <label className="text-base font-semibold text-foreground cursor-pointer" onClick={() => setEnableSoftPegA(!enableSoftPegA)}>
+                                Soft Peg (Token A)
+                            </label>
+                        </div>
+                        {enableSoftPegA && <span className="text-2xl font-bold text-[#00ffff]">{softPegA.toFixed(2)}</span>}
+                    </div>
+
+                    {enableSoftPegA ? (
+                        <>
+                            <input
+                                type="range"
+                                min="0"
+                                max="2"
+                                step="0.01"
+                                value={softPegA}
+                                onChange={(e) => setSoftPegA(Number(e.target.value))}
+                                className="w-full accent-[#00ffff]"
+                            />
+                            <div className="text-xs text-muted-foreground mt-2">
+                                Kink Fee applied ONLY when price &lt; {softPegA.toFixed(2)}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="text-sm text-muted-foreground italic py-2">
+                            Standard Kink: Higher fee ALWAYS applied when selling Token A (Diverging)
+                        </div>
+                    )}
+                </div>
+            </div>
+            <div className="lg:col-span-1">
+                <div className={`rounded-xl border border-border/50 bg-muted/40 p-6 transition-opacity ${!enableSoftPegB ? 'opacity-70' : ''}`}>
+                    <div className="flex justify-between mb-3 items-center">
+                         <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={enableSoftPegB}
+                                onChange={(e) => setEnableSoftPegB(e.target.checked)}
+                                className="w-4 h-4 accent-[#ff00ff] cursor-pointer"
+                            />
+                            <label className="text-base font-semibold text-foreground cursor-pointer" onClick={() => setEnableSoftPegB(!enableSoftPegB)}>
+                                Soft Peg (Token B)
+                            </label>
+                        </div>
+                        {enableSoftPegB && <span className="text-2xl font-bold text-[#ff00ff]">{softPegB.toFixed(2)}</span>}
+                    </div>
+
+                    {enableSoftPegB ? (
+                        <>
+                            <input
+                                type="range"
+                                min="0"
+                                max="2"
+                                step="0.01"
+                                value={softPegB}
+                                onChange={(e) => setSoftPegB(Number(e.target.value))}
+                                className="w-full accent-[#ff00ff]"
+                            />
+                            <div className="text-xs text-muted-foreground mt-2">
+                                 Kink Fee applied ONLY when price &lt; {softPegB.toFixed(2)}
+                            </div>
+                        </>
+                    ) : (
+                         <div className="text-sm text-muted-foreground italic py-2">
+                            Standard Kink: Higher fee ALWAYS applied when selling Token B (Diverging)
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
 
         <Button

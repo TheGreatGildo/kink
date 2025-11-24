@@ -1,6 +1,26 @@
-export const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY_ADDRESS || '';
-export const ROUTER_ADDRESS = process.env.NEXT_PUBLIC_ROUTER_ADDRESS || '';
-export const POOL_ADDRESS = process.env.NEXT_PUBLIC_POOL_ADDRESS || '';
+const DEFAULT_FACTORY_ADDRESS = '0x4db2882b6c293d834e42af21333fe0a6b0b5646e';
+const DEFAULT_ROUTER_ADDRESS = '0x54bc2b04492a61e2621788f7b65c3edf0afb0c9b';
+const DEFAULT_POOL_ADDRESS = '0x2d66a2ed5aeaf4f6103a4f1fc41212bb56b0901f';
+const DEFAULT_REGISTRY_ADDRESS = '0x1961750ab3a9ce9a1f4c7b9620e28f843e2cd7f7';
+
+export const FACTORY_ADDRESS = normalizeAddress(
+  process.env.NEXT_PUBLIC_FACTORY_ADDRESS,
+  DEFAULT_FACTORY_ADDRESS
+);
+
+export const ROUTER_ADDRESS = normalizeAddress(
+  process.env.NEXT_PUBLIC_ROUTER_ADDRESS,
+  DEFAULT_ROUTER_ADDRESS
+);
+
+export const POOL_ADDRESS = normalizeAddress(
+  process.env.NEXT_PUBLIC_POOL_ADDRESS,
+  DEFAULT_POOL_ADDRESS
+);
+export const REGISTRY_ADDRESS = normalizeAddress(
+  process.env.NEXT_PUBLIC_REGISTRY_ADDRESS,
+  DEFAULT_REGISTRY_ADDRESS
+);
 export const FAUCET_ADDRESS = process.env.NEXT_PUBLIC_FAUCET_ADDRESS || '';
 
 const DEFAULT_DEFI_ADDRESS = '0xCB8FA9a76b8e203D8C3797bF438d8FB81Ea3326A'; // alUSD
@@ -38,12 +58,14 @@ export const LOCALHOST_CHAIN_ID = 31337;
 
 // Deployed pool configuration (DEFI/CEFI pool)
 export const DEPLOYED_POOL = {
-  address: POOL_ADDRESS || '0xe3A1Fba2B3487a567a538ccc515F1dbdDeBF60Bd',
+  address: POOL_ADDRESS,
   token0: TOKEN0_FALLBACK,
   token1: TOKEN1_FALLBACK,
-  A0: 500, // When token0 > token1
-  A1: 120, // When token1 > token0
-  baseFee: 2, // 0.02%
-  kinkingFee: 16, // 0.16%
+  A0: 1000,
+  A1: 69,
+  baseFee: 5,
+  kinkingFee: 25,
+  softPeg0: '1000000000000000000',
+  softPeg1: '1000000000000000000',
 };
 

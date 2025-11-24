@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { getTokenInfo } from '../lib/tokens';
 
 interface TokenLogoProps {
@@ -23,53 +24,34 @@ export function TokenLogo({ address, size = 32, className }: TokenLogoProps) {
   const token = getTokenInfo(address);
 
   if (token?.logo) {
-    // Remove XML declaration and clean up SVG for data URL
-    let cleanSvg = token.logo;
-    // Remove XML declaration if present
-    cleanSvg = cleanSvg.replace(/<\?xml[^>]*\?>/g, '');
-    // Remove any leading/trailing whitespace
-    cleanSvg = cleanSvg.trim();
+    const cleanSvg = token.logo.replace(/<\?xml[^>]*\?>/g, '').trim();
+    let svgDataUrl: string | null = null;
 
-    // Use base64 encoding for better compatibility
     try {
       const base64Svg = btoa(unescape(encodeURIComponent(cleanSvg)));
-      const svgDataUrl = `data:image/svg+xml;base64,${base64Svg}`;
-
-      return (
-        <img
-          src={svgDataUrl}
-          alt={token.symbol}
-          className={className}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: '50%',
-            objectFit: 'contain',
-            display: 'block'
-          }}
-          onError={(e) => {
-            // If image fails, hide it and show fallback
-            e.currentTarget.style.display = 'none';
-          }}
-        />
-      );
-    } catch (e) {
-      // If base64 encoding fails, try URL encoding
+      svgDataUrl = `data:image/svg+xml;base64,${base64Svg}`;
+    } catch {
       const encodedSvg = encodeURIComponent(cleanSvg);
-      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
+      svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
+    }
 
+    if (svgDataUrl) {
       return (
-        <img
+        <Image
           src={svgDataUrl}
           alt={token.symbol}
+          width={size}
+          height={size}
           className={className}
           style={{
-            width: size,
-            height: size,
             borderRadius: '50%',
             objectFit: 'contain',
-            display: 'block'
+            display: 'block',
           }}
+          onError={(event) => {
+            event.currentTarget.style.display = 'none';
+          }}
+          unoptimized
         />
       );
     }

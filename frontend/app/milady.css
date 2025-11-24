@@ -2,31 +2,31 @@
 /* Milady Theme - Light & Chaotic */
 :root[data-theme="milady"],
 [data-theme="milady"] {
-  --background: oklch(0.98 0.03 350);
-  --foreground: oklch(0.3 0.2 350);
-  --card: oklch(0.99 0.02 350);
-  --card-foreground: oklch(0.25 0.22 350);
-  --popover: oklch(0.99 0.02 350);
-  --popover-foreground: oklch(0.25 0.22 350);
-  --primary: oklch(0.65 0.28 350);
-  --primary-foreground: oklch(0.99 0.02 350);
-  --secondary: oklch(0.95 0.08 350);
-  --secondary-foreground: oklch(0.35 0.25 350);
-  --muted: oklch(0.96 0.05 350);
-  --muted-foreground: oklch(0.5 0.18 350);
-  --accent: oklch(0.92 0.12 350);
-  --accent-foreground: oklch(0.4 0.25 350);
-  --destructive: oklch(0.65 0.25 15);
-  --border: oklch(0.85 0.15 350);
-  --input: oklch(0.97 0.04 350);
-  --ring: oklch(0.7 0.3 350);
-  --outline: oklch(0.7 0.3 350 / 0.4);
-  --progress: oklch(0.7 0.28 350 / 50%);
+  --background: oklch(0.985 0.03 230);
+  --foreground: oklch(0.28 0.08 330);
+  --card: oklch(0.99 0.02 240);
+  --card-foreground: oklch(0.3 0.09 320);
+  --popover: oklch(0.99 0.02 240);
+  --popover-foreground: oklch(0.3 0.09 320);
+  --primary: oklch(0.78 0.18 205);
+  --primary-foreground: oklch(0.22 0.04 250);
+  --secondary: oklch(0.88 0.12 325);
+  --secondary-foreground: oklch(0.32 0.11 320);
+  --muted: oklch(0.95 0.04 240);
+  --muted-foreground: oklch(0.55 0.1 320);
+  --accent: oklch(0.82 0.16 300);
+  --accent-foreground: oklch(0.24 0.08 300);
+  --destructive: oklch(0.63 0.24 15);
+  --border: oklch(0.9 0.08 250);
+  --input: oklch(0.97 0.03 240);
+  --ring: oklch(0.72 0.2 210);
+  --outline: oklch(0.7 0.16 300 / 0.4);
+  --progress: oklch(0.74 0.2 215 / 50%);
 }
 
 :root[data-theme="milady"] body,
 [data-theme="milady"] body {
-  background: linear-gradient(135deg, oklch(0.99 0.02 350) 0%, oklch(0.97 0.05 350) 25%, oklch(0.98 0.03 340) 50%, oklch(0.97 0.05 350) 75%, oklch(0.99 0.02 350) 100%);
+  background: linear-gradient(135deg, oklch(0.99 0.02 230) 0%, oklch(0.96 0.05 215) 30%, oklch(0.98 0.03 300) 65%, oklch(0.99 0.02 330) 100%);
   background-size: 400% 400%;
   animation: gradient-shift 12s ease infinite;
 }
@@ -40,14 +40,14 @@
   width: 100%;
   height: 100%;
   background-image:
-    radial-gradient(circle at 15% 25%, oklch(0.9 0.25 350 / 0.12) 0%, transparent 45%),
-    radial-gradient(circle at 85% 75%, oklch(0.85 0.22 340 / 0.1) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, oklch(0.88 0.2 350 / 0.08) 0%, transparent 55%),
-    radial-gradient(ellipse at 30% 60%, oklch(0.7 0.25 15 / 0.06) 0%, transparent 30%),
-    radial-gradient(ellipse at 70% 40%, oklch(0.75 0.2 360 / 0.05) 0%, transparent 35%);
+    radial-gradient(circle at 15% 25%, oklch(0.86 0.19 210 / 0.15) 0%, transparent 45%),
+    radial-gradient(circle at 85% 75%, oklch(0.82 0.2 305 / 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, oklch(0.84 0.18 235 / 0.1) 0%, transparent 55%),
+    radial-gradient(ellipse at 30% 60%, oklch(0.7 0.2 15 / 0.07) 0%, transparent 30%),
+    radial-gradient(ellipse at 70% 40%, oklch(0.78 0.18 330 / 0.06) 0%, transparent 35%);
   pointer-events: none;
   z-index: 0;
-  animation: milady-pulse 3s ease-in-out infinite, milady-rotate 20s linear infinite;
+  animation: milady-pulse 3s ease-in-out infinite;
 }
 
 /* Subtle static noise overlay - makes you wonder if you saw something */
@@ -59,32 +59,31 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-image:
+  /* background-image:
     repeating-linear-gradient(
       0deg,
       transparent,
       transparent 20px,
-      oklch(0.9 0.2 350 / 0.01) 20px,
-      oklch(0.9 0.2 350 / 0.01) 21px
+      oklch(0.84 0.18 210 / 0.015) 20px,
+      oklch(0.84 0.18 210 / 0.015) 21px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
       transparent 20px,
-      oklch(0.85 0.18 340 / 0.01) 20px,
-      oklch(0.85 0.18 340 / 0.01) 21px
+      oklch(0.82 0.18 320 / 0.015) 20px,
+      oklch(0.82 0.18 320 / 0.015) 21px
     ),
-    radial-gradient(circle at 20% 30%, oklch(0.9 0.25 350 / 0.02) 0%, transparent 2px),
-    radial-gradient(circle at 80% 70%, oklch(0.85 0.22 340 / 0.015) 0%, transparent 1.5px),
-    radial-gradient(circle at 50% 50%, oklch(0.88 0.2 350 / 0.01) 0%, transparent 1px),
-    radial-gradient(circle at 30% 60%, oklch(0.7 0.25 15 / 0.01) 0%, transparent 1px),
-    radial-gradient(circle at 70% 40%, oklch(0.75 0.2 360 / 0.01) 0%, transparent 1px);
+    radial-gradient(circle at 20% 30%, oklch(0.86 0.22 205 / 0.03) 0%, transparent 2px),
+    radial-gradient(circle at 80% 70%, oklch(0.84 0.2 315 / 0.02) 0%, transparent 1.5px),
+    radial-gradient(circle at 50% 50%, oklch(0.85 0.18 240 / 0.015) 0%, transparent 1px),
+    radial-gradient(circle at 30% 60%, oklch(0.69 0.22 15 / 0.015) 0%, transparent 1px),
+    radial-gradient(circle at 70% 40%, oklch(0.78 0.18 330 / 0.015) 0%, transparent 1px); */
   background-size: 100% 100%, 100% 100%, 200% 200%, 150% 150%, 180% 180%, 120% 120%, 160% 160%;
   pointer-events: none;
   z-index: 9999;
   mix-blend-mode: screen;
-  animation: milady-scan 8s linear infinite, milady-static-random 11s ease-in-out infinite, milady-ghost-flicker 13s ease-in-out infinite;
-  opacity: 0;
+  opacity: 0.05;
 }
 
 @keyframes milady-pulse {
@@ -106,69 +105,15 @@
   }
 }
 
-@keyframes milady-rotate {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes milady-scan {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes milady-static-random {
-  0%, 85%, 100% {
-    opacity: 0;
-  }
-  86% {
-    opacity: 0.03;
-  }
-  87% {
-    opacity: 0.08;
-  }
-  88% {
-    opacity: 0.03;
-  }
-  89% {
-    opacity: 0;
-  }
-}
-
-@keyframes milady-ghost-flicker {
-  0%, 92%, 100% {
-    opacity: 0;
-  }
-  93% {
-    opacity: 0.04;
-  }
-  94% {
-    opacity: 0.1;
-  }
-  95% {
-    opacity: 0.04;
-  }
-  96% {
-    opacity: 0;
-  }
-}
-
 /* Jirai theme: Cute but chaotic styling with pink accents */
 :root[data-theme="milady"] [class*="card"],
 :root[data-theme="milady"] [class*="Card"] {
-  border: 2px solid oklch(0.85 0.2 350);
-  background: oklch(0.99 0.02 350);
+  border: 2px solid oklch(0.86 0.14 230);
+  background: oklch(0.99 0.02 250);
   box-shadow:
-    0 0 8px oklch(0.9 0.25 350 / 0.2),
-    0 0 16px oklch(0.85 0.22 340 / 0.1),
-    0 4px 12px oklch(0.8 0.2 350 / 0.15);
+    0 0 8px oklch(0.86 0.18 210 / 0.25),
+    0 0 16px oklch(0.82 0.18 320 / 0.15),
+    0 4px 12px oklch(0.78 0.16 300 / 0.2);
   position: relative;
   overflow: hidden;
 }
@@ -181,13 +126,7 @@
   left: -50%;
   width: 200%;
   height: 200%;
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 10px,
-    oklch(0.9 0.2 350 / 0.03) 10px,
-    oklch(0.9 0.2 350 / 0.03) 20px
-  );
+
   animation: milady-card-shimmer 3s linear infinite;
   pointer-events: none;
   z-index: 0;
@@ -195,7 +134,7 @@
 
 :root[data-theme="milady"] button:not(:disabled):not([data-slot="popover-trigger"]),
 :root[data-theme="milady"] [role="button"]:not(:disabled):not([data-slot="popover-trigger"]) {
-  border: 2px solid oklch(0.8 0.25 350);
+  border: 2px solid oklch(0.78 0.2 215);
   transition: all 0.15s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   position: relative;
   overflow: hidden;
@@ -210,18 +149,18 @@
   width: 0;
   height: 0;
   border-radius: 50%;
-  background: oklch(0.9 0.3 350 / 0.3);
+  background: oklch(0.84 0.22 215 / 0.35);
   transform: translate(-50%, -50%);
   transition: width 0.6s, height 0.6s;
 }
 
 :root[data-theme="milady"] button:not(:disabled):not([data-slot="popover-trigger"]):hover,
 :root[data-theme="milady"] [role="button"]:not(:disabled):not([data-slot="popover-trigger"]):hover {
-  border-color: oklch(0.7 0.3 350);
+  border-color: oklch(0.7 0.22 210);
   box-shadow:
-    0 0 12px oklch(0.9 0.28 350 / 0.4),
-    0 0 24px oklch(0.85 0.25 340 / 0.2),
-    0 4px 16px oklch(0.8 0.22 350 / 0.3);
+    0 0 12px oklch(0.86 0.2 210 / 0.4),
+    0 0 24px oklch(0.82 0.2 320 / 0.25),
+    0 4px 16px oklch(0.78 0.18 300 / 0.35);
   transform: translateY(-2px) scale(1.02);
   animation: milady-button-wiggle 0.5s ease-in-out;
 }
@@ -234,23 +173,23 @@
 
 :root[data-theme="milady"] button[class*="primary"],
 :root[data-theme="milady"] button:not([class*="secondary"]):not([class*="ghost"]):not([class*="outline"]) {
-  background: linear-gradient(135deg, oklch(0.9 0.28 350), oklch(0.85 0.25 340), oklch(0.8 0.22 360));
+  background: linear-gradient(135deg, oklch(0.84 0.22 210), oklch(0.82 0.2 300), oklch(0.79 0.19 330));
   background-size: 200% 200%;
-  color: oklch(0.99 0.02 350);
-  border-color: oklch(0.7 0.3 350);
+  color: oklch(0.99 0.02 240);
+  border-color: oklch(0.7 0.22 210);
   animation: milady-gradient-shift 3s ease infinite;
   font-weight: 600;
-  text-shadow: 0 1px 2px oklch(0.7 0.25 15 / 0.3);
+  text-shadow: 0 1px 2px oklch(0.7 0.2 15 / 0.35);
 }
 
 :root[data-theme="milady"] input:focus,
 :root[data-theme="milady"] select:focus,
 :root[data-theme="milady"] textarea:focus {
-  border-color: oklch(0.7 0.3 350) !important;
+  border-color: oklch(0.7 0.22 210) !important;
   box-shadow:
-    0 0 0 3px oklch(0.9 0.25 350 / 0.2),
-    0 0 12px oklch(0.85 0.28 340 / 0.3),
-    0 0 24px oklch(0.8 0.22 350 / 0.15) !important;
+    0 0 0 3px oklch(0.85 0.2 210 / 0.25),
+    0 0 12px oklch(0.82 0.22 310 / 0.35),
+    0 0 24px oklch(0.78 0.2 300 / 0.2) !important;
   animation: milady-input-pulse 1.5s ease-in-out infinite;
 }
 
@@ -259,10 +198,10 @@
 :root[data-theme="milady"] h2,
 :root[data-theme="milady"] h3 {
   text-shadow:
-    0 0 6px oklch(0.9 0.28 350 / 0.5),
-    0 0 12px oklch(0.85 0.25 340 / 0.3),
-    0 0 18px oklch(0.8 0.22 360 / 0.2),
-    2px 2px 0 oklch(0.7 0.2 15 / 0.2);
+    0 0 6px oklch(0.86 0.2 210 / 0.55),
+    0 0 12px oklch(0.82 0.2 320 / 0.35),
+    0 0 18px oklch(0.78 0.18 330 / 0.25),
+    2px 2px 0 oklch(0.68 0.18 15 / 0.25);
   animation: milady-text-glow 2s ease-in-out infinite;
   position: relative;
 }
@@ -291,32 +230,32 @@
 @keyframes milady-input-pulse {
   0%, 100% {
     box-shadow:
-      0 0 0 3px oklch(0.9 0.25 350 / 0.2),
-      0 0 12px oklch(0.85 0.28 340 / 0.3),
-      0 0 24px oklch(0.8 0.22 350 / 0.15);
+      0 0 0 3px oklch(0.85 0.2 210 / 0.25),
+      0 0 12px oklch(0.82 0.22 310 / 0.35),
+      0 0 24px oklch(0.78 0.2 300 / 0.2);
   }
   50% {
     box-shadow:
-      0 0 0 4px oklch(0.9 0.25 350 / 0.3),
-      0 0 16px oklch(0.85 0.28 340 / 0.4),
-      0 0 32px oklch(0.8 0.22 350 / 0.2);
+      0 0 0 4px oklch(0.85 0.2 210 / 0.35),
+      0 0 16px oklch(0.82 0.22 310 / 0.45),
+      0 0 32px oklch(0.78 0.2 300 / 0.25);
   }
 }
 
 @keyframes milady-text-glow {
   0%, 100% {
     text-shadow:
-      0 0 6px oklch(0.9 0.28 350 / 0.5),
-      0 0 12px oklch(0.85 0.25 340 / 0.3),
-      0 0 18px oklch(0.8 0.22 360 / 0.2),
-      2px 2px 0 oklch(0.7 0.2 15 / 0.2);
+      0 0 6px oklch(0.86 0.2 210 / 0.55),
+      0 0 12px oklch(0.82 0.2 320 / 0.35),
+      0 0 18px oklch(0.78 0.18 330 / 0.25),
+      2px 2px 0 oklch(0.68 0.18 15 / 0.25);
   }
   50% {
     text-shadow:
-      0 0 8px oklch(0.9 0.28 350 / 0.6),
-      0 0 16px oklch(0.85 0.25 340 / 0.4),
-      0 0 24px oklch(0.8 0.22 360 / 0.3),
-      2px 2px 0 oklch(0.7 0.2 15 / 0.3);
+      0 0 8px oklch(0.86 0.2 210 / 0.65),
+      0 0 16px oklch(0.82 0.2 320 / 0.45),
+      0 0 24px oklch(0.78 0.18 330 / 0.35),
+      2px 2px 0 oklch(0.68 0.18 15 / 0.35);
   }
 }
 
@@ -382,5 +321,5 @@
 :root[data-theme="milady"] [data-slot="progress-indicator"].bg-progress-foreground,
 [data-theme="milady"] [data-slot="progress-indicator"].bg-progress-foreground,
 :root[data-theme="milady"] .bg-progress-foreground {
-  background: linear-gradient(to right, oklch(0.8 0.3 350), oklch(0.7 0.25 15)) !important;
+  background: linear-gradient(to right, oklch(0.82 0.2 210), oklch(0.78 0.18 320)) !important;
 }

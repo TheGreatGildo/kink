@@ -3,11 +3,13 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/KinkFactory.sol";
+import "../src/PoolRegistry.sol";
 import "../src/KinkPool.sol";
 import "../src/mocks/MockERC20.sol";
 
 contract AuditTest is Test {
     KinkFactory factory;
+    PoolRegistry registry;
     MockERC20 token0;
     MockERC20 token1;
     KinkPool pool;
@@ -16,7 +18,9 @@ contract AuditTest is Test {
     address victim = address(0xCAFE);
 
     function setUp() public {
-        factory = new KinkFactory();
+        registry = new PoolRegistry(address(this), address(0));
+        factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         token0 = new MockERC20("Token A", "TKNA");
         token1 = new MockERC20("Token B", "TKNB");
 
@@ -31,7 +35,9 @@ contract AuditTest is Test {
             100, // A0
             100, // A1
             4,   // baseFee (0.04%)
-            10   // kinkingFee (0.10%)
+            10,   // kinkingFee (0.10%)
+            2e18,  // softPeg0
+            2e18   // softPeg1
         );
         pool = KinkPool(poolAddress);
 

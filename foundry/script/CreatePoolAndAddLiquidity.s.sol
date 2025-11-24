@@ -41,8 +41,9 @@ contract CreatePoolAndAddLiquidity is Script {
         // Base fee: 0.02% = 2 basis points, Kink fee: 0.16% = 16 basis points
         uint256 baseFee = 2; // 0.02% = 2 basis points
         uint256 kinkingFee = 16; // 0.16% = 16 basis points
+        uint256 softPeg = 0.98e18; // 0.98
 
-        address pool = factory.createPool(ALUSD, USDE, 120, 500, baseFee, kinkingFee);
+        address pool = factory.createPool(ALUSD, USDE, 120, 500, baseFee, kinkingFee, softPeg, softPeg);
         console.log("Pool created at:", pool);
 
         // Add initial liquidity: alUSD 120, USDe 500

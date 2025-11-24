@@ -1,6 +1,6 @@
 'use client';
 
-import { MonitorCog, Moon, SunMedium } from 'lucide-react';
+import { Moon, SunMedium } from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
 import { useTheme } from './providers/ThemeProvider';
@@ -8,7 +8,6 @@ import { Button } from './ui/button';
 
 const MODES = [
   { id: 'light', label: 'Light', icon: SunMedium },
-  { id: 'system', label: 'Auto', icon: MonitorCog },
   { id: 'dark', label: 'Dark', icon: Moon },
 ] as const;
 

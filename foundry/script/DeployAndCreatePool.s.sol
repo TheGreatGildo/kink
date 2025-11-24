@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/KinkFactory.sol";
 import "../src/KinkRouter.sol";
+import "../src/PoolRegistry.sol";
 import "../src/KinkPool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -18,14 +19,19 @@ contract DeployAndCreatePool is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy Factory
+        // 1. Deploy Factory + Registry
+        console.log("Deploying PoolRegistry...");
+        PoolRegistry registry = new PoolRegistry(deployer, address(0));
+        console.log("PoolRegistry deployed at:", address(registry));
+
         console.log("Deploying KinkFactory...");
-        KinkFactory factory = new KinkFactory();
+        KinkFactory factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         console.log("KinkFactory deployed at:", address(factory));
 
         // 2. Deploy Router
         console.log("Deploying KinkRouter...");
-        KinkRouter router = new KinkRouter(address(factory));
+        KinkRouter router = new KinkRouter(address(registry));
         console.log("KinkRouter deployed at:", address(router));
 
         // 3. Create Pool
@@ -52,6 +58,8 @@ contract DeployAndCreatePool is Script {
 
         uint256 baseFee = 2;        // 0.02% = 2 bps
         uint256 kinkingFee = 16;    // 0.16% = 16 bps
+        uint256 softPeg0 = 0.98e18; // 0.98 for token0
+        uint256 softPeg1 = 0.98e18; // 0.98 for token1
 
         console.log("Creating pool with parameters:");
         console.log("Token0:", token0);
@@ -60,8 +68,10 @@ contract DeployAndCreatePool is Script {
         console.log("A1:", A1);
         console.log("Base Fee:", baseFee);
         console.log("Kinking Fee:", kinkingFee);
+        console.log("Soft Peg 0:", softPeg0);
+        console.log("Soft Peg 1:", softPeg1);
 
-        address poolAddress = factory.createPool(token0, token1, A0, A1, baseFee, kinkingFee);
+        address poolAddress = factory.createPool(token0, token1, A0, A1, baseFee, kinkingFee, softPeg0, softPeg1);
         console.log("Pool deployed at:", poolAddress);
 
         // 4. Add Initial Liquidity (Optional but good for verification)
@@ -103,6 +113,7 @@ contract DeployAndCreatePool is Script {
         // Output for processing
         console.log("JSON_OUTPUT_START");
         console.log("{");
+        console.log(string.concat('"REGISTRY_ADDRESS": "', vm.toString(address(registry)), '",'));
         console.log(string.concat('"FACTORY_ADDRESS": "', vm.toString(address(factory)), '",'));
         console.log(string.concat('"ROUTER_ADDRESS": "', vm.toString(address(router)), '",'));
         console.log(string.concat('"POOL_ADDRESS": "', vm.toString(poolAddress), '"'));

@@ -53,6 +53,13 @@ export default function Swap({ poolAddress }: SwapProps) {
   const [crossesKink, setCrossesKink] = useState(false);
   const [spotPriceQuote, setSpotPriceQuote] = useState<bigint | null>(null);
   const [swapType, setSwapType] = useState<'converging' | 'diverging' | 'split'>('converging');
+  const [feeBreakdown, setFeeBreakdown] = useState({
+    basePortionPct: 1,
+    kinkPortionPct: 0,
+    totalBps: 0,
+    softPegTriggered: false,
+  });
+  const [showInverseRate, setShowInverseRate] = useState(false);
 
   const poolData = usePoolData(poolAddress);
 
@@ -85,6 +92,11 @@ export default function Swap({ poolAddress }: SwapProps) {
   // Get token metadata for both tokens
   const token0Meta = useTokenMetadata(token0Address);
   const token1Meta = useTokenMetadata(token1Address);
+  const baseFeeBps = poolData.baseFee ? Number(poolData.baseFee) : 0;
+  const kinkFeeBps = poolData.kinkingFee ? Number(poolData.kinkingFee) : 0;
+  const softPeg0Value = poolData.softPeg0;
+  const softPeg1Value = poolData.softPeg1;
+
 
   // Get token addresses based on selection
   const inputTokenAddress = token0Address && token1Address
@@ -155,92 +167,80 @@ export default function Swap({ poolAddress }: SwapProps) {
     }
   }, [isSuccess, inputTokenApproval, inputTokenBalance, outputTokenBalance, poolData, refetchQuote]);
 
-  useEffect(() => {
-    if (inputAmount && poolData.reserves && ROUTER_ADDRESS) {
-      const amount = BigInt(Math.floor(parseFloat(inputAmount) * 10 ** inputTokenDecimals));
+  const reserve0 = poolData.reserves?.reserve0;
+  const reserve1 = poolData.reserves?.reserve1;
 
-      // Update expected output when router data changes
+  useEffect(() => {
+    if (
+      !inputAmount ||
+      reserve0 === undefined ||
+      reserve1 === undefined ||
+      !ROUTER_ADDRESS
+    ) {
+      setExpectedOutput(null);
+      setCrossesKink(false);
+      setSwapType('converging');
+      return;
+    }
+
+    const parsedAmount = BigInt(Math.floor(parseFloat(inputAmount) * 10 ** inputTokenDecimals));
+
       if (routerOutput !== undefined) {
         setExpectedOutput(routerOutput);
 
-        // Log for debugging - show why output might be small
         if (routerOutput === null || routerOutput === BigInt(0)) {
           console.warn('Router returned zero or null output:', {
             inputAmount,
-            amount: amount.toString(),
-            amountFormatted: (Number(amount) / 10 ** inputTokenDecimals).toFixed(6),
+          amount: parsedAmount.toString(),
+          amountFormatted: (Number(parsedAmount) / 10 ** inputTokenDecimals).toFixed(6),
             routerOutput: routerOutput?.toString(),
             inputToken,
             outputToken,
             poolAddress,
-            reserves: poolData.reserves,
-            reserve0Formatted: poolData.reserves ? (Number(poolData.reserves.reserve0) / 10 ** token0Meta.decimals).toFixed(6) : 'N/A',
-            reserve1Formatted: poolData.reserves ? (Number(poolData.reserves.reserve1) / 10 ** token1Meta.decimals).toFixed(6) : 'N/A',
+          reserve0Formatted: (Number(reserve0) / 10 ** token0Meta.decimals).toFixed(6),
+          reserve1Formatted: (Number(reserve1) / 10 ** token1Meta.decimals).toFixed(6),
           });
         } else {
-          // Log when output is very small
           const outputFormatted = Number(routerOutput) / 10 ** outputTokenDecimals;
-          const inputFormatted = Number(amount) / 10 ** inputTokenDecimals;
+        const inputFormatted = Number(parsedAmount) / 10 ** inputTokenDecimals;
           const ratio = outputFormatted / inputFormatted;
 
           if (routerOutput < BigInt(1000) || ratio < 0.01) {
             console.warn('Router returned very small output:', {
               inputAmount,
               inputFormatted: inputFormatted.toFixed(6),
-              amount: amount.toString(),
+            amount: parsedAmount.toString(),
               routerOutput: routerOutput.toString(),
               outputFormatted: outputFormatted.toFixed(6),
               ratio: ratio.toFixed(6),
               inputToken,
               outputToken,
               poolAddress,
-              reserves: poolData.reserves,
-              reserve0Formatted: poolData.reserves ? (Number(poolData.reserves.reserve0) / 10 ** token0Meta.decimals).toFixed(6) : 'N/A',
-              reserve1Formatted: poolData.reserves ? (Number(poolData.reserves.reserve1) / 10 ** token1Meta.decimals).toFixed(6) : 'N/A',
+            reserve0Formatted: (Number(reserve0) / 10 ** token0Meta.decimals).toFixed(6),
+            reserve1Formatted: (Number(reserve1) / 10 ** token1Meta.decimals).toFixed(6),
               note: 'Very small output may be due to low pool liquidity or calculation rounding',
             });
           }
         }
       } else {
-        // Clear expected output if router query is disabled or failed
         setExpectedOutput(null);
       }
 
-      // Determine Swap Type (Converging, Diverging, Split) based on KinkPool logic
-      if (poolData.reserves) {
-        // We MUST normalize reserves to 18 decimals for accurate comparison if tokens have different decimals
-        const r0 = poolData.reserves.reserve0;
-        const r1 = poolData.reserves.reserve1;
-
-        // Get decimals (default to 18)
         const d0 = token0Meta.decimals || 18;
         const d1 = token1Meta.decimals || 18;
-
-        // Normalize reserves to 18 decimals
-        // multiplier = 10^(18 - decimals)
         const m0 = 10n ** BigInt(18 - d0);
         const m1 = 10n ** BigInt(18 - d1);
 
-        const xp0 = r0 * m0;
-        const xp1 = r1 * m1;
-
-        // Normalize input amount to 18 decimals as well
-        const amount = BigInt(Math.floor(parseFloat(inputAmount) * 10 ** inputTokenDecimals));
-        const amountNormalized = amount * (inputToken === 0 ? m0 : m1);
+    const xp0 = reserve0 * m0;
+    const xp1 = reserve1 * m1;
+    const amountNormalized = parsedAmount * (inputToken === 0 ? m0 : m1);
 
         let isConverging = false;
         let crosses = false;
 
-        // i = inputToken index, j = outputToken index
-        if (inputToken === 0) { // Input is Token 0. Output is Token 1.
-             // Reserves: xp0 (input side), xp1 (output side).
-             // If xp0 < xp1: Converging (adding to xp0 moves towards xp1).
+    if (inputToken === 0) {
              if (xp0 < xp1) {
                  isConverging = true;
-                 // Check crossing: using approximate midpoint threshold logic
-                 // Threshold is (xp0 + xp1) / 2.
-                 // If xp0 + amountNormalized > threshold, we crossed.
-
                  const sum = xp0 + xp1;
                  const threshold = sum / 2n;
                  const newXP0 = xp0 + amountNormalized;
@@ -248,13 +248,8 @@ export default function Swap({ poolAddress }: SwapProps) {
                  if (newXP0 > threshold) {
                      crosses = true;
                  }
-             } else {
-                 // xp0 >= xp1: Diverging (adding to xp0 moves further away from xp1).
-                 isConverging = false;
              }
-        } else { // Input is Token 1. Output is Token 0.
-            // Reserves: xp1 (input side), xp0 (output side).
-            // If xp1 < xp0: Converging.
+    } else {
             if (xp1 < xp0) {
                 isConverging = true;
                 const sum = xp0 + xp1;
@@ -264,8 +259,6 @@ export default function Swap({ poolAddress }: SwapProps) {
                 if (newXP1 > threshold) {
                     crosses = true;
                 }
-            } else {
-                isConverging = false;
             }
         }
 
@@ -275,31 +268,195 @@ export default function Swap({ poolAddress }: SwapProps) {
         } else {
             setSwapType(isConverging ? 'converging' : 'diverging');
         }
-      }
+  }, [
+    inputAmount,
+    inputToken,
+    outputToken,
+    routerOutput,
+    inputTokenDecimals,
+    outputTokenDecimals,
+    poolAddress,
+    reserve0,
+    reserve1,
+    token0Meta.decimals,
+    token1Meta.decimals,
+  ]);
+
+  useEffect(() => {
+    if (
+      reserve0 === undefined ||
+      reserve1 === undefined ||
+      !inputAmount ||
+      parseFloat(inputAmount) <= 0
+    ) {
+      setFeeBreakdown({
+        basePortionPct: 1,
+        kinkPortionPct: 0,
+        totalBps: baseFeeBps,
+        softPegTriggered: false,
+      });
+      return;
     }
-  }, [inputAmount, inputToken, outputToken, poolData, routerOutput, inputTokenDecimals, outputTokenDecimals, poolAddress, token0Meta.decimals, token1Meta.decimals]);
+
+    const d0 = token0Meta.decimals || 18;
+    const d1 = token1Meta.decimals || 18;
+    const m0 = 10n ** BigInt(18 - d0);
+    const m1 = 10n ** BigInt(18 - d1);
+    const xp0 = reserve0 * m0;
+    const xp1 = reserve1 * m1;
+
+    const amountIn = BigInt(Math.floor(parseFloat(inputAmount) * 10 ** inputTokenDecimals));
+    if (amountIn <= 0n) {
+      setFeeBreakdown({
+        basePortionPct: 1,
+        kinkPortionPct: 0,
+        totalBps: baseFeeBps,
+        softPegTriggered: false,
+      });
+      return;
+    }
+
+    const xpInBefore = inputToken === 0 ? xp0 : xp1;
+    const xpOutBefore = inputToken === 0 ? xp1 : xp0;
+    const inMultiplier = inputToken === 0 ? m0 : m1;
+    const outMultiplier = inputToken === 0 ? m1 : m0;
+    const amountNormalized = amountIn * inMultiplier;
+
+      const sum = xp0 + xp1;
+      const threshold = sum / 2n;
+    const inIsConverging = xpInBefore < xpOutBefore;
+
+    const dxNormalizedTotal = amountNormalized;
+    const dyNormalizedTotal = expectedOutput ? expectedOutput * outMultiplier : 0n;
+    const ONE_18 = 10n ** 18n;
+
+    const softPeg = inputToken === 0 ? softPeg0Value : softPeg1Value;
+
+    const decimalsForCalc = inputTokenDecimals ?? 18;
+    const spotSamplePower = Math.max(0, decimalsForCalc - 2);
+    const spotSampleAmount =
+      decimalsForCalc >= 2
+        ? BigInt(10) ** BigInt(spotSamplePower)
+        : BigInt(1);
+    const spotInputNormalized = spotSampleAmount * inMultiplier;
+    const spotOutputNormalized = spotPriceQuote ? spotPriceQuote * outMultiplier : 0n;
+    const reservePrice =
+      xpInBefore > 0n && xpOutBefore > 0n ? (xpOutBefore * ONE_18) / xpInBefore : 0n;
+    const spotPrice =
+      spotPriceQuote && spotInputNormalized > 0n
+        ? (spotOutputNormalized * ONE_18) / spotInputNormalized
+        : reservePrice;
+
+    let basePortion = 0n;
+    let divergingPortion = amountNormalized;
+    let convergingDx = 0n;
+
+    if (inIsConverging) {
+      const toEquilibrium = threshold > xpInBefore ? threshold - xpInBefore : 0n;
+      convergingDx = amountNormalized < toEquilibrium ? amountNormalized : toEquilibrium;
+      basePortion = convergingDx;
+      divergingPortion = amountNormalized > convergingDx ? amountNormalized - convergingDx : 0n;
+    }
+
+    let kinkPortion = 0n;
+    let softPegTriggered = false;
+
+    if (divergingPortion > 0n && expectedOutput && dxNormalizedTotal > 0n) {
+      const dxBase = convergingDx;
+      const dxDiv = divergingPortion;
+      const dyBase = (dyNormalizedTotal * dxBase) / dxNormalizedTotal;
+      const dyDiv = dyNormalizedTotal > dyBase ? dyNormalizedTotal - dyBase : 0n;
+
+      const dxDivNormalized = dxDiv;
+      const priceStart =
+        convergingDx > 0n
+          ? ONE_18
+          : spotPrice;
+      const priceEnd =
+        dxDivNormalized > 0n && dyDiv > 0n
+          ? (dyDiv * ONE_18) / dxDivNormalized
+          : spotPrice;
+
+      if (softPeg && softPeg > 0n) {
+        if (priceStart <= softPeg) {
+          // Already below peg, entire portion uses base fee (matches contract behavior)
+          basePortion += dxDiv;
+        } else if (priceEnd >= softPeg) {
+          basePortion += dxDiv;
+        } else {
+          softPegTriggered = true;
+          const drop = priceStart > priceEnd ? priceStart - priceEnd : 0n;
+          const distanceToPeg = priceStart - softPeg;
+          if (drop > 0n && distanceToPeg > 0n) {
+            let baseShare = (dxDiv * distanceToPeg) / drop;
+            if (baseShare > dxDiv) baseShare = dxDiv;
+            basePortion += baseShare;
+            kinkPortion = dxDiv - baseShare;
+          } else {
+            kinkPortion = dxDiv;
+          }
+        }
+      } else {
+        basePortion += dxDiv;
+      }
+    } else {
+      basePortion += divergingPortion;
+    }
+
+    if (basePortion > amountNormalized) {
+      basePortion = amountNormalized;
+    }
+    kinkPortion = amountNormalized > basePortion ? amountNormalized - basePortion : 0n;
+    const total = amountNormalized === 0n ? 1n : amountNormalized;
+    const basePct = Number(basePortion) / Number(total);
+    const kinkPct = Number(kinkPortion) / Number(total);
+    const totalBps = basePct * baseFeeBps + kinkPct * kinkFeeBps;
+
+    setFeeBreakdown({
+      basePortionPct: Math.min(1, Math.max(0, basePct)),
+      kinkPortionPct: Math.min(1, Math.max(0, kinkPct)),
+      totalBps,
+      softPegTriggered,
+    });
+  }, [
+    baseFeeBps,
+    kinkFeeBps,
+    inputAmount,
+    inputToken,
+    inputTokenDecimals,
+    expectedOutput,
+    reserve0,
+    reserve1,
+    spotPriceQuote,
+    softPeg0Value,
+    softPeg1Value,
+    token0Meta.decimals,
+    token1Meta.decimals,
+  ]);
 
   // Format Fee Display
   // baseFee and kinkingFee are in basis points (0-10000) where 10000 = 100%.
   // 1 bps = 0.01%.
   // So divide by 100 to get percentage.
-  const baseFeeFormatted = poolData.baseFee
-      ? (Number(poolData.baseFee) / 100).toFixed(2)
-      : '0.02';
-  const kinkingFeeFormatted = poolData.kinkingFee
-      ? (Number(poolData.kinkingFee) / 100).toFixed(2)
-      : '0.16';
+  const baseFeeFormatted = baseFeeBps ? (baseFeeBps / 100).toFixed(2) : '0.00';
+  const kinkingFeeFormatted = kinkFeeBps ? (kinkFeeBps / 100).toFixed(2) : '0.00';
+
+  const estimatedFeePercent = (feeBreakdown.totalBps / 100).toFixed(2);
+  const estimatedFeeTokenValue =
+    inputAmount && feeBreakdown.totalBps > 0
+      ? (
+          (parseFloat(inputAmount) * feeBreakdown.totalBps) /
+          10_000
+        ).toFixed(6)
+      : '0.000000';
 
   // Determine current fee to display
   const currentFeeDisplay = useMemo(() => {
-      if (swapType === 'split') {
-          return `${baseFeeFormatted}% → ${kinkingFeeFormatted}%`;
-      } else if (swapType === 'converging') {
-          return `${baseFeeFormatted}%`;
-      } else {
-          return `${kinkingFeeFormatted}%`;
-      }
-  }, [swapType, baseFeeFormatted, kinkingFeeFormatted]);
+    if (feeBreakdown.kinkPortionPct > 0) {
+      return `${(feeBreakdown.basePortionPct * 100).toFixed(0)}% @ ${baseFeeFormatted}% → ${(feeBreakdown.kinkPortionPct * 100).toFixed(0)}% @ ${kinkingFeeFormatted}%`;
+    }
+    return `${baseFeeFormatted}%`;
+  }, [feeBreakdown, baseFeeFormatted, kinkingFeeFormatted]);
 
   // Debug fees
   useEffect(() => {
@@ -335,6 +492,39 @@ export default function Swap({ poolAddress }: SwapProps) {
       const impact = (1 - realRate / spotRate) * 100;
       return impact < 0.01 ? '<0.01' : impact.toFixed(2);
   }, [amountIn, expectedOutput, spotPriceQuote, inputTokenDecimals]);
+
+  const inputSymbol = inputToken === 0 ? (token0Meta.symbol || 'Token 0') : (token1Meta.symbol || 'Token 1');
+  const outputSymbol = outputToken === 0 ? (token0Meta.symbol || 'Token 0') : (token1Meta.symbol || 'Token 1');
+
+  const exchangeRate = useMemo(() => {
+    if (!amountIn || amountIn === BigInt(0) || !expectedOutput || expectedOutput === BigInt(0)) {
+      return null;
+    }
+    const inputDecimals = inputTokenDecimals ?? 18;
+    const outputDecimals = outputTokenDecimals ?? 18;
+    const inputQty = Number(amountIn) / 10 ** inputDecimals;
+    const outputQty = Number(expectedOutput) / 10 ** outputDecimals;
+    if (!isFinite(inputQty) || !isFinite(outputQty) || inputQty === 0 || outputQty === 0) {
+      return null;
+    }
+
+    const rate = showInverseRate ? inputQty / outputQty : outputQty / inputQty;
+    const base = showInverseRate ? inputSymbol : outputSymbol;
+    const quote = showInverseRate ? outputSymbol : inputSymbol;
+
+    return {
+      value: rate.toFixed(6),
+      label: `${base} / ${quote}`,
+    };
+  }, [
+    amountIn,
+    expectedOutput,
+    inputSymbol,
+    outputSymbol,
+    inputTokenDecimals,
+    outputTokenDecimals,
+    showInverseRate,
+  ]);
 
   const handleSwap = () => {
     if (!inputAmount || !poolAddress || !ROUTER_ADDRESS) return;
@@ -460,6 +650,8 @@ export default function Swap({ poolAddress }: SwapProps) {
           </code>
         </div>
       </div>
+
+
 
       {/* Kink Warning */}
       {crossesKink && (
@@ -648,6 +840,18 @@ export default function Swap({ poolAddress }: SwapProps) {
             </span>
           </div>
           <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Estimated Fee</span>
+            <span className="font-semibold text-xl text-foreground">
+              {estimatedFeePercent}% (~{estimatedFeeTokenValue}{' '}
+              {inputToken === 0 ? token0Meta.symbol : token1Meta.symbol})
+            </span>
+          </div>
+          {feeBreakdown.softPegTriggered && (
+            <p className="text-xs text-yellow-400">
+              Soft peg triggered: remaining portion will incur the kink fee.
+            </p>
+          )}
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Min Received</span>
             <span className="font-semibold text-xl">
               {expectedOutput
@@ -660,6 +864,28 @@ export default function Swap({ poolAddress }: SwapProps) {
             <span className={`font-semibold text-xl ${Number(priceImpact) > 1 ? 'text-yellow-400' : 'text-green-400'}`}>
               {priceImpact}%
             </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Exchange Rate</span>
+            {exchangeRate ? (
+              <button
+                type="button"
+                onClick={() => setShowInverseRate((prev) => !prev)}
+                className="flex flex-col items-end text-right"
+              >
+                <span className="font-semibold text-xl text-foreground">
+                  {exchangeRate.value}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {exchangeRate.label}
+                </span>
+                <span className="text-[10px] text-[#00ffff] mt-1 uppercase tracking-wide">
+                  tap to flip
+                </span>
+              </button>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
           </div>
         </div>
 

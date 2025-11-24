@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-theme="milady">
+    <html lang="en" className="dark" data-theme="dark">
       <body className="antialiased">
         <ThemeProvider>
           <AppProviders>
