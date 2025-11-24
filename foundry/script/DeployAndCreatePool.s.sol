@@ -52,6 +52,8 @@ contract DeployAndCreatePool is Script {
 
         uint256 baseFee = 2;        // 0.02% = 2 bps
         uint256 kinkingFee = 16;    // 0.16% = 16 bps
+        uint256 softPeg0 = 0.98e18; // 0.98 for token0
+        uint256 softPeg1 = 0.98e18; // 0.98 for token1
 
         console.log("Creating pool with parameters:");
         console.log("Token0:", token0);
@@ -60,8 +62,10 @@ contract DeployAndCreatePool is Script {
         console.log("A1:", A1);
         console.log("Base Fee:", baseFee);
         console.log("Kinking Fee:", kinkingFee);
+        console.log("Soft Peg 0:", softPeg0);
+        console.log("Soft Peg 1:", softPeg1);
 
-        address poolAddress = factory.createPool(token0, token1, A0, A1, baseFee, kinkingFee);
+        address poolAddress = factory.createPool(token0, token1, A0, A1, baseFee, kinkingFee, softPeg0, softPeg1);
         console.log("Pool deployed at:", poolAddress);
 
         // 4. Add Initial Liquidity (Optional but good for verification)

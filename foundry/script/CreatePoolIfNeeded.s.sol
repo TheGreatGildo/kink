@@ -36,7 +36,13 @@ contract CreatePoolIfNeeded is Script {
         console.log("Token B (USDe):", USDE);
 
         // Check if pool already exists
-        address existingPool = factory.getPool(ALUSD, USDE);
+        // We use getPoolsForPair to find any pool for this pair
+        address[] memory pools = factory.getPoolsForPair(ALUSD, USDE);
+        address existingPool = address(0);
+        if (pools.length > 0) {
+            existingPool = pools[0]; // Take the first one for now
+        }
+
         if (existingPool != address(0)) {
             console.log("\n[INFO] Pool already exists at:", existingPool);
 
@@ -107,14 +113,16 @@ contract CreatePoolIfNeeded is Script {
             uint256 A1 = 120;  // When alUSD > USDe
             uint256 baseFee = 2;  // 0.02% = 2 basis points
             uint256 kinkingFee = 16;  // 0.16% = 16 basis points
+            uint256 softPeg = 0.98e18; // 0.98
 
             console.log("Pool parameters:");
             console.log("  A0:", A0);
             console.log("  A1:", A1);
             console.log("  Base Fee:", baseFee, "bp");
             console.log("  Kinking Fee:", kinkingFee, "bp");
+            console.log("  Soft Peg:", softPeg);
 
-            address newPool = factory.createPool(ALUSD, USDE, A0, A1, baseFee, kinkingFee);
+            address newPool = factory.createPool(ALUSD, USDE, A0, A1, baseFee, kinkingFee, softPeg, softPeg);
             console.log("[SUCCESS] Pool created at:", newPool);
 
             // Add initial liquidity

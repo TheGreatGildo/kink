@@ -18,6 +18,7 @@ contract KinkPoolTest is Test {
     uint256 constant A1 = 200;
     uint256 constant BASE_FEE = 4; // 0.04%
     uint256 constant KINKING_FEE = 10; // 0.1%
+    uint256 constant SOFT_PEG = 2e18; // High value to preserve test behavior
 
     function setUp() public {
         token0 = new MockERC20("Token0", "T0");
@@ -25,7 +26,7 @@ contract KinkPoolTest is Test {
 
         // Deploy factory and create pool through it
         factory = new KinkFactory();
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         pool = KinkPool(poolAddress);
 
         // Mint tokens to users
@@ -49,11 +50,13 @@ contract KinkPoolTest is Test {
         assertEq(pool.A1(), expectedA1, "A1 should be set");
         assertEq(pool.baseFee(), BASE_FEE, "Base fee should be set");
         assertEq(pool.kinkingFee(), KINKING_FEE, "Kinking fee should be set");
+        assertEq(pool.softPeg0(), SOFT_PEG, "Soft peg 0 should be set");
+        assertEq(pool.softPeg1(), SOFT_PEG, "Soft peg 1 should be set");
     }
 
     function testInitialize_RevertIfZeroAddress() public {
         vm.expectRevert("KinkFactory: Zero address");
-        factory.createPool(address(0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        factory.createPool(address(0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
     }
 
     function testInitialize_RevertIfTokensNotSorted() public {
@@ -62,7 +65,7 @@ contract KinkPoolTest is Test {
         MockERC20 newToken1 = new MockERC20("NewToken1", "NT1");
 
         // Factory will sort tokens, so this test checks factory behavior
-        address poolAddress = factory.createPool(address(newToken1), address(newToken0), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(newToken1), address(newToken0), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         KinkPool newPool = KinkPool(poolAddress);
         // Tokens should be sorted by factory
         assertEq(newPool.token0(), address(newToken0));
@@ -74,7 +77,7 @@ contract KinkPoolTest is Test {
         MockERC20 newToken0 = new MockERC20("NewToken0", "NT0");
         MockERC20 newToken1 = new MockERC20("NewToken1", "NT1");
         vm.expectRevert("KinkPool: Invalid A0");
-        factory.createPool(address(newToken0), address(newToken1), 1, A1, BASE_FEE, KINKING_FEE);
+        factory.createPool(address(newToken0), address(newToken1), 1, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
     }
 
     function testAddLiquidity_FirstDeposit() public {

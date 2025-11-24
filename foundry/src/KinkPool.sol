@@ -31,6 +31,8 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
     uint256 public A1;
     uint256 public baseFee;
     uint256 public kinkingFee;
+    uint256 public softPeg0;
+    uint256 public softPeg1;
     uint256[N_COINS] private tokenMultipliers;
 
     event Exchange(
@@ -74,7 +76,9 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         uint256 _A0,
         uint256 _A1,
         uint256 _baseFee,
-        uint256 _kinkingFee
+        uint256 _kinkingFee,
+        uint256 _softPeg0,
+        uint256 _softPeg1
     ) external initializer {
         require(_token0 != address(0) && _token1 != address(0), "KinkPool: Zero address");
         require(_token0 < _token1, "KinkPool: Tokens not sorted");
@@ -82,6 +86,7 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         require(_A1 >= 2 && _A1 <= 1000, "KinkPool: Invalid A1");
         require(_baseFee <= FEE_DENOMINATOR, "KinkPool: Invalid baseFee");
         require(_kinkingFee <= FEE_DENOMINATOR, "KinkPool: Invalid kinkingFee");
+        // _softPeg0 and _softPeg1 are typically around 1e18 (1.0).
 
         uint8 decimals0 = IERC20Metadata(_token0).decimals();
         uint8 decimals1 = IERC20Metadata(_token1).decimals();
@@ -97,6 +102,8 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         A1 = _A1;
         baseFee = _baseFee;
         kinkingFee = _kinkingFee;
+        softPeg0 = _softPeg0;
+        softPeg1 = _softPeg1;
 
         tokenMultipliers[0] = 10 ** (18 - decimals0);
         tokenMultipliers[1] = 10 ** (18 - decimals1);
@@ -255,8 +262,23 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
             uint256 y2 = CurveMath.get_y(i, j, x2, xp2, targetA);
             uint256 dy2Normalized = xp2[j] - y2;
 
-            // Apply kinkingFee to the diverging part
-            uint256 dy2Fee = (dy2Normalized * kinkingFee) / FEE_DENOMINATOR;
+            // Apply fee to the diverging part based on soft peg
+            // Calculate effective price of this chunk: dy/dx
+            // If price < softPeg, apply kinkingFee, else baseFee
+            uint256 currentFee = baseFee;
+            if (dx2Normalized > 0) {
+                uint256 price = (dy2Normalized * 1e18) / dx2Normalized;
+                uint256 peg = i == 0 ? softPeg0 : softPeg1; // i is input token index
+                // If i=0 (token0 input), we are selling token0.
+                // Diverging means token0 is weak.
+                // We check if price (token1 per token0) < softPeg0 (token0's value).
+
+                if (price < peg) {
+                    currentFee = kinkingFee;
+                }
+            }
+
+            uint256 dy2Fee = (dy2Normalized * currentFee) / FEE_DENOMINATOR;
             dy2Normalized -= dy2Fee;
 
             uint256 dy2 = dy2Normalized / tokenMultipliers[j];
@@ -274,12 +296,28 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
             }
             // If equal or greater, converging = false (diverging).
 
-            uint256 fee = converging ? baseFee : kinkingFee;
+            uint256 fee = baseFee;
+            if (!converging) {
+                // Diverging
+                // We calculate fee after calculating dyNormalized below
+            }
 
             uint256 dxNormalized = actualDx * tokenMultipliers[i];
             uint256 x = xpBefore[i] + dxNormalized;
             uint256 y = CurveMath.get_y(i, j, x, xpBefore, currentA);
             uint256 dyNormalized = xpBefore[j] - y;
+
+            if (!converging) {
+                 if (dxNormalized > 0) {
+                    uint256 price = (dyNormalized * 1e18) / dxNormalized;
+                    uint256 peg = i == 0 ? softPeg0 : softPeg1;
+                    if (price < peg) {
+                        fee = kinkingFee;
+                    }
+                 }
+            } else {
+                fee = baseFee;
+            }
 
             // Apply fee on the normalized output delta
             uint256 dyFee = (dyNormalized * fee) / FEE_DENOMINATOR;

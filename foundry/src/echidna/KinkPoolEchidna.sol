@@ -22,7 +22,7 @@ contract KinkPoolEchidna {
         token1 = new MockERC20("Token1", "T1");
 
         KinkFactory factory = new KinkFactory();
-        address poolAddress = factory.createPool(address(token0), address(token1), 100, 200, 4, 10);
+        address poolAddress = factory.createPool(address(token0), address(token1), 100, 200, 4, 10, 2e18, 2e18);
         pool = KinkPool(poolAddress);
 
         token0.approve(poolAddress, type(uint256).max);

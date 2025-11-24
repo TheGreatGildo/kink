@@ -57,19 +57,42 @@ contract DeployAndInitialize is Script {
         console.log("Token A (DEFI):", DEFI);
         console.log("Token B (CEFI):", CEFI);
 
-        // Note: Factory sorts tokens; keep same amplification logic as original
-        uint256 A0 = 120;  // Will become A1Param (for when alUSD > USDe, i.e., token1 > token0)
-        uint256 A1 = 500;  // Will become A0Param (for when USDe > alUSD, i.e., token0 > token1)
-        uint256 baseFee = 2;      // 0.02% = 2 basis points
-        uint256 kinkingFee = 16;  // 0.16% = 16 basis points
+        // Note: Factory sorts tokens.
+        // We want A0=1000 when CEFI is heavier, A1=69 when DEFI is heavier.
+        // We need to know which token is which to assign A0/A1 correctly to factory call.
+        // If CEFI < DEFI, then token0=CEFI, token1=DEFI.
+        //   A0Param (token0 > token1) = A(CEFI > DEFI) = 1000
+        //   A1Param (token1 > token0) = A(DEFI > CEFI) = 69
+        // If DEFI < CEFI, then token0=DEFI, token1=CEFI.
+        //   A0Param (token0 > token1) = A(DEFI > CEFI) = 69
+        //   A1Param (token1 > token0) = A(CEFI > DEFI) = 1000
+
+        // We can just define desired A_CEFI_Heavy and A_DEFI_Heavy and let logic handle it?
+        // No, createPool signature is (tokenA, tokenB, _A0, _A1, ...)
+        // Where _A0 is amp when tokenA > tokenB.
+        // So we just pass (CEFI, DEFI, A_CEFI_Heavy, A_DEFI_Heavy, ...)
+
+        uint256 A_CEFI_Heavy = 1000;
+        uint256 A_DEFI_Heavy = 69;
+
+        uint256 baseFee = 4;      // 0.04% = 4 basis points
+        uint256 kinkingFee = 25;  // 0.25% = 25 basis points
+
+        // No soft peg for CEFI (set to 0 or very low, or just > 1e18? Actually 0 disables it effectively if we check < softPeg)
+        // Wait, if price < softPeg. If softPeg is 0, price is never < 0 (unsigned). So 0 disables it.
+        uint256 softPegCEFI = 0;
+        uint256 softPegDEFI = 0.99e18; // 0.99
 
         console.log("Pool Parameters:");
-        console.log("  A0 (DEFI > CEFI):", A0);
-        console.log("  A1 (CEFI > DEFI):", A1);
-        console.log("  Base Fee:", baseFee, "bp (0.02%)");
-        console.log("  Kinking Fee:", kinkingFee, "bp (0.16%)");
+        console.log("  A (CEFI > DEFI):", A_CEFI_Heavy);
+        console.log("  A (DEFI > CEFI):", A_DEFI_Heavy);
+        console.log("  Base Fee:", baseFee, "bp (0.04%)");
+        console.log("  Kinking Fee:", kinkingFee, "bp (0.25%)");
+        console.log("  Soft Peg CEFI:", softPegCEFI);
+        console.log("  Soft Peg DEFI:", softPegDEFI);
 
-        address pool = factory.createPool(DEFI, CEFI, A0, A1, baseFee, kinkingFee);
+        // createPool(tokenA, tokenB, A(A>B), A(B>A), ...)
+        address pool = factory.createPool(CEFI, DEFI, A_CEFI_Heavy, A_DEFI_Heavy, baseFee, kinkingFee, softPegCEFI, softPegDEFI);
         console.log("[OK] Pool created at:", pool);
 
         // Verify pool initialization

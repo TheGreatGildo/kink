@@ -31,7 +31,9 @@ contract AuditTest is Test {
             100, // A0
             100, // A1
             4,   // baseFee (0.04%)
-            10   // kinkingFee (0.10%)
+            10,   // kinkingFee (0.10%)
+            2e18,  // softPeg0
+            2e18   // softPeg1
         );
         pool = KinkPool(poolAddress);
 

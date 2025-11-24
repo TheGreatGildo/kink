@@ -19,6 +19,7 @@ contract KinkRouterTest is Test {
     uint256 constant A1 = 200;
     uint256 constant BASE_FEE = 4;
     uint256 constant KINKING_FEE = 10;
+    uint256 constant SOFT_PEG = 2e18;
 
     function setUp() public {
         factory = new KinkFactory();
@@ -27,7 +28,7 @@ contract KinkRouterTest is Test {
         token0 = new MockERC20("Token0", "T0");
         token1 = new MockERC20("Token1", "T1");
 
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         pool = KinkPool(poolAddress);
 
         // Mint tokens to user

@@ -21,6 +21,7 @@ contract KinkPoolInvariantTest is Test {
     uint256 constant A1 = 200;
     uint256 constant BASE_FEE = 4;
     uint256 constant KINKING_FEE = 10;
+    uint256 constant SOFT_PEG = 2e18;
 
     function setUp() public {
         factory = new KinkFactory();
@@ -34,7 +35,7 @@ contract KinkPoolInvariantTest is Test {
     }
 
     function testInvariant_DNeverDecreases() public {
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         KinkPool pool = KinkPool(poolAddress);
 
         // Add initial liquidity
@@ -69,7 +70,7 @@ contract KinkPoolInvariantTest is Test {
     }
 
     function testInvariant_RemoveLiquidityProportional() public {
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         KinkPool pool = KinkPool(poolAddress);
 
         // Add liquidity
@@ -110,7 +111,7 @@ contract KinkPoolInvariantTest is Test {
     }
 
     function testInvariant_ExchangePreservesValue() public {
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         KinkPool pool = KinkPool(poolAddress);
 
         // Add liquidity
@@ -154,7 +155,7 @@ contract KinkPoolInvariantTest is Test {
     }
 
     function testInvariant_NoArbitrage() public {
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         KinkPool pool = KinkPool(poolAddress);
 
         // Add liquidity

@@ -23,6 +23,7 @@ contract FeeAnalysisTest is Test {
     uint256 constant BASE_FEE = 100;     // 1%
     uint256 constant KINKING_FEE = 500;  // 5%
     uint256 constant FEE_DENOMINATOR = 10000;
+    uint256 constant SOFT_PEG = 2e18;
 
     function setUp() public {
         token0 = new MockERC20("Token0", "T0");
@@ -30,7 +31,7 @@ contract FeeAnalysisTest is Test {
 
         factory = new KinkFactory();
         // Use symmetric A to simplify math, focus on fee logic
-        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE);
+        address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         pool = KinkPool(poolAddress);
 
         token0.mint(user1, 1000000e18);
