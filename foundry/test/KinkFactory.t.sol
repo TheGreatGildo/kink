@@ -3,11 +3,13 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/KinkFactory.sol";
+import "../src/PoolRegistry.sol";
 import "../src/KinkPool.sol";
 import "../src/mocks/MockERC20.sol";
 
 contract KinkFactoryTest is Test {
     KinkFactory factory;
+    PoolRegistry registry;
     MockERC20 tokenA;
     MockERC20 tokenB;
     MockERC20 tokenC;
@@ -19,7 +21,9 @@ contract KinkFactoryTest is Test {
     uint256 constant SOFT_PEG = 2e18;
 
     function setUp() public {
-        factory = new KinkFactory();
+        registry = new PoolRegistry(address(this), address(0));
+        factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         tokenA = new MockERC20("TokenA", "TA");
         tokenB = new MockERC20("TokenB", "TB");
         tokenC = new MockERC20("TokenC", "TC");
@@ -32,7 +36,10 @@ contract KinkFactoryTest is Test {
         assertEq(factory.getPoolByParams(address(tokenA), address(tokenB), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG), pool, "Pool mapping should be set");
         // assertEq(factory.getPool(address(tokenB), address(tokenA)), pool, "Reverse mapping should be set"); // No reverse mapping in new design for getPoolByParams input order handled inside?
         // getPoolByParams handles sorting internally
-        assertEq(factory.getPoolByParams(address(tokenB), address(tokenA), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG), pool, "Reverse mapping should be set");
+        // When swapping token order, we must also swap the A parameters to match the pool's configuration
+        // Pool has A0 (for A>B) = 100, A1 (for B>A) = 200.
+        // Asking for (B, A) with (200, 100) asks for: _A0 (B>A) = 200, _A1 (A>B) = 100. This matches.
+        assertEq(factory.getPoolByParams(address(tokenB), address(tokenA), A1, A0, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG), pool, "Reverse mapping should be set");
 
         assertEq(factory.allPoolsLength(), 1, "Should have one pool");
         assertEq(factory.allPools(0), pool, "Pool should be in array");
@@ -91,14 +98,20 @@ contract KinkFactoryTest is Test {
         address pool = factory.createPool(address(tokenA), address(tokenB), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         KinkPool poolContract = KinkPool(pool);
 
+        (address expectedToken0, address expectedToken1) =
+            address(tokenA) < address(tokenB) ? (address(tokenA), address(tokenB)) : (address(tokenB), address(tokenA));
+
         assertEq(poolContract.factory(), address(factory), "Factory should be set");
-        assertEq(poolContract.token0(), address(tokenA), "Token0 should be set");
-        assertEq(poolContract.token1(), address(tokenB), "Token1 should be set");
-        assertEq(poolContract.A0(), A0, "A0 should be set");
-        assertEq(poolContract.A1(), A1, "A1 should be set");
+        assertEq(poolContract.token0(), expectedToken0, "Token0 should be set");
+        assertEq(poolContract.token1(), expectedToken1, "Token1 should be set");
+        uint256 expectedA0 = address(tokenA) < address(tokenB) ? A0 : A1;
+        uint256 expectedA1 = address(tokenA) < address(tokenB) ? A1 : A0;
+        assertEq(poolContract.A0(), expectedA0, "A0 should be set");
+        assertEq(poolContract.A1(), expectedA1, "A1 should be set");
         assertEq(poolContract.baseFee(), BASE_FEE, "Base fee should be set");
         assertEq(poolContract.kinkingFee(), KINKING_FEE, "Kinking fee should be set");
         assertEq(poolContract.softPeg0(), SOFT_PEG, "Soft peg 0 should be set");
         assertEq(poolContract.softPeg1(), SOFT_PEG, "Soft peg 1 should be set");
+        assertEq(poolContract.admin(), address(this), "Admin should be set to deployer");
     }
 }

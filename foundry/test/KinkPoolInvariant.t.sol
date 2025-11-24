@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/KinkPool.sol";
 import "../src/KinkFactory.sol";
+import "../src/PoolRegistry.sol";
 import "../src/mocks/MockERC20.sol";
 
 /**
@@ -12,6 +13,7 @@ import "../src/mocks/MockERC20.sol";
  */
 contract KinkPoolInvariantTest is Test {
     KinkFactory factory;
+    PoolRegistry registry;
     MockERC20 token0;
     MockERC20 token1;
     address user1 = address(0x1);
@@ -24,7 +26,9 @@ contract KinkPoolInvariantTest is Test {
     uint256 constant SOFT_PEG = 2e18;
 
     function setUp() public {
-        factory = new KinkFactory();
+        registry = new PoolRegistry(address(this), address(0));
+        factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         token0 = new MockERC20("Token0", "T0");
         token1 = new MockERC20("Token1", "T1");
 

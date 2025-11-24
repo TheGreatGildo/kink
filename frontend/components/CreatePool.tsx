@@ -87,10 +87,10 @@ const calculatePrice = (x: number, A: number, D: number, dx = 1) => {
 export default function CreatePool() {
   const [tokenA, setTokenA] = useState(CEFI_TOKEN_ADDRESS);
   const [tokenB, setTokenB] = useState(DEFI_TOKEN_ADDRESS);
-  const [A0, setA0] = useState(100);
-  const [A1, setA1] = useState(200);
-  const [baseFee, setBaseFee] = useState(4);
-  const [kinkingFee, setKinkingFee] = useState(10);
+  const [A0, setA0] = useState(1000);
+  const [A1, setA1] = useState(69);
+  const [baseFee, setBaseFee] = useState(5);
+  const [kinkingFee, setKinkingFee] = useState(25);
 
   const [enableSoftPegA, setEnableSoftPegA] = useState(false);
   const [enableSoftPegB, setEnableSoftPegB] = useState(true); // Default enabled for Token B (DeFi) in CEFI-DEFI mode

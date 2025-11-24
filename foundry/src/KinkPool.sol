@@ -10,6 +10,12 @@ import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 import "./libraries/CurveMath.sol";
 
+interface IKinkFactory {
+    function feeReceiver() external view returns (address);
+    function baseFeeShare() external view returns (uint256);
+    function kinkingFeeShare() external view returns (uint256);
+}
+
 /**
  * @title KinkPool
  * @notice Two-asset stableswap pool with asymmetric amplification ("kink") behavior.
@@ -23,6 +29,8 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
     uint256 public constant MINIMUM_LIQUIDITY = 1000;
 
     address public factory;
+    address public admin;
+    address public pendingAdmin; // Governance fix: Two-step transfer
     address public token0;
     address public token1;
     uint8 public token0Decimals;
@@ -43,6 +51,15 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         uint256 dx,
         uint256 dy
     );
+
+    event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event AdminFeesCollected(uint256 amount0, uint256 amount1);
+
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "KinkPool: Only admin");
+        _;
+    }
 
     event AddLiquidity(
         address indexed provider,
@@ -78,7 +95,8 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         uint256 _baseFee,
         uint256 _kinkingFee,
         uint256 _softPeg0,
-        uint256 _softPeg1
+        uint256 _softPeg1,
+        address _admin
     ) external initializer {
         require(_token0 != address(0) && _token1 != address(0), "KinkPool: Zero address");
         require(_token0 < _token1, "KinkPool: Tokens not sorted");
@@ -91,9 +109,10 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         uint8 decimals0 = IERC20Metadata(_token0).decimals();
         uint8 decimals1 = IERC20Metadata(_token1).decimals();
         require(decimals0 <= 18 && decimals1 <= 18, "KinkPool: Decimals too large");
-        require(decimals0 == decimals1, "KinkPool: Decimals mismatch");
+        // decimals mismatch requirement removed
 
         factory = msg.sender;
+        admin = _admin;
         token0 = _token0;
         token1 = _token1;
         token0Decimals = decimals0;
@@ -110,23 +129,43 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
     }
 
     /**
-     * @notice Get current amplification parameter based on pool state
-     * @return Current A value
+     * @notice Start ownership transfer
+     * @param newOwner New admin address
      */
-    function _get_current_A() internal view returns (uint256) {
-        uint256 b0 = IERC20(token0).balanceOf(address(this));
-        uint256 b1 = IERC20(token1).balanceOf(address(this));
+    function transferOwnership(address newOwner) external onlyAdmin {
+        require(newOwner != address(0), "KinkPool: Zero address");
+        pendingAdmin = newOwner;
+        emit OwnershipTransferStarted(admin, newOwner);
+    }
 
-        if (b0 == b1) {
-            // At exact peg, use higher A
-            return A0 > A1 ? A0 : A1;
+    /**
+     * @notice Collect accumulated admin fees
+     */
+    uint256 public adminFee0;
+    uint256 public adminFee1;
+
+    function collectFees() external nonReentrant {
+        address feeReceiver = IKinkFactory(factory).feeReceiver();
+        require(feeReceiver != address(0), "KinkPool: Fee receiver not set");
+
+        uint256 amount0 = adminFee0;
+        uint256 amount1 = adminFee1;
+
+        if (amount0 > 0) {
+            adminFee0 = 0;
+            IERC20(token0).safeTransfer(feeReceiver, amount0);
         }
-        return b0 > b1 ? A0 : A1;
+        if (amount1 > 0) {
+            adminFee1 = 0;
+            IERC20(token1).safeTransfer(feeReceiver, amount1);
+        }
+
+        emit AdminFeesCollected(amount0, amount1);
     }
 
     function _balances() internal view returns (uint256[N_COINS] memory reserves) {
-        reserves[0] = IERC20(token0).balanceOf(address(this));
-        reserves[1] = IERC20(token1).balanceOf(address(this));
+        reserves[0] = IERC20(token0).balanceOf(address(this)) - adminFee0;
+        reserves[1] = IERC20(token1).balanceOf(address(this)) - adminFee1;
     }
 
     /**
@@ -137,6 +176,25 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
     function _xp(uint256[N_COINS] memory balances) internal view returns (uint256[N_COINS] memory xp) {
         xp[0] = balances[0] * tokenMultipliers[0];
         xp[1] = balances[1] * tokenMultipliers[1];
+    }
+
+    /**
+     * @notice Get current amplification parameter based on balances
+     */
+    function _get_current_A() internal view returns (uint256) {
+        uint256[N_COINS] memory xp = _xp(_balances());
+        return _get_A(xp);
+    }
+
+    /**
+     * @notice Get amplification parameter based on explicit balances
+     */
+    function _get_A(uint256[N_COINS] memory xp) internal view returns (uint256) {
+        if (xp[0] > xp[1]) {
+            return A0;
+        } else {
+            return A1;
+        }
     }
 
     /**
@@ -162,40 +220,84 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
     }
 
     /**
-     * @notice Execute a swap
-     * @param i Index of input token (0 or 1)
-     * @param j Index of output token (0 or 1)
-     * @param dx Input amount
-     * @param min_dy Minimum output amount (slippage protection)
-     * @return dy Output amount
+     * @notice Calculate virtual marginal price using small epsilon
+     * @param i Index of input token
+     * @param j Index of output token
+     * @param x Input balance (normalized)
+     * @param xp Current normalized balances
+     * @param A Amplification parameter
+     * @return Price in 18 decimals (output token per input token)
      */
-    function exchange(
+    function _get_marginal_price(
         uint256 i,
         uint256 j,
-        uint256 dx,
-        uint256 min_dy
-    ) external nonReentrant returns (uint256 dy) {
-        require(i != j && i < N_COINS && j < N_COINS, "KinkPool: Invalid indices");
-        require(dx > 0, "KinkPool: Zero input");
+        uint256 x,
+        uint256[N_COINS] memory xp,
+        uint256 A
+    ) internal pure returns (uint256) {
+        // Simulate price by checking y at x and x+epsilon
+        uint256 epsilon = 1e15; // 0.001 unit (normalized 18 decimals)
 
-        IERC20 inputToken = i == 0 ? IERC20(token0) : IERC20(token1);
-        IERC20 outputToken = j == 0 ? IERC20(token0) : IERC20(token1);
+        uint256 y1 = CurveMath.get_y(i, j, x, xp, A);
+        uint256 y2 = CurveMath.get_y(i, j, x + epsilon, xp, A);
 
-        uint256[N_COINS] memory reservesBefore = _balances();
-        uint256 inputBalanceBefore = reservesBefore[i];
-        uint256 outputBalanceBefore = reservesBefore[j];
+        if (y1 <= y2) return 0; // Should not happen
 
-        // Transfer input tokens
-        inputToken.safeTransferFrom(msg.sender, address(this), dx);
+        // dy = y1 - y2
+        // dx = epsilon
+        // price = dy/dx
+        return ((y1 - y2) * 1e18) / epsilon;
+    }
 
-        uint256 inputBalanceAfter = IERC20(address(inputToken)).balanceOf(address(this));
-        require(inputBalanceAfter > inputBalanceBefore, "KinkPool: Insufficient input");
-        uint256 actualDx = inputBalanceAfter - inputBalanceBefore;
+    /**
+     * @notice Binary search to find dx where price crosses peg
+     */
+    function _find_crossing_dx(
+        uint256 i,
+        uint256 j,
+        uint256 startX,
+        uint256[N_COINS] memory xp,
+        uint256 A,
+        uint256 peg,
+        uint256 maxDx
+    ) internal pure returns (uint256) {
+        uint256 low = 0;
+        uint256 high = maxDx;
 
-        uint256[N_COINS] memory xpBefore = _xp(reservesBefore);
+        // 10 iterations provides decent precision for this purpose
+        // Note: Minor precision loss on fee splitting is acceptable / expected behavior.
+        for (uint256 k = 0; k < 10; k++) {
+            uint256 mid = (low + high) / 2;
+            if (mid == 0) {
+                low = 1;
+                continue;
+            }
+            uint256 price = _get_marginal_price(i, j, startX + mid, xp, A);
 
-        // Calculate D using current state to determine crossing point
-        uint256 currentA = _get_current_A();
+            if (price > peg) {
+                // Price too high, need more dx (price drops as x increases)
+                low = mid;
+            } else {
+                // Price too low, need less dx
+                high = mid;
+            }
+        }
+        return (low + high) / 2;
+    }
+
+    function _calculate_exchange(
+        uint256 i,
+        uint256 j,
+        uint256 actualDx,
+        uint256[N_COINS] memory xpBefore
+    ) internal view returns (uint256 dy, uint256 adminFeeAmount) {
+        uint256 baseFeeShare = IKinkFactory(factory).baseFeeShare();
+        uint256 kinkingFeeShare = IKinkFactory(factory).kinkingFeeShare();
+
+        uint256 currentA = xpBefore[0] > xpBefore[1] ? A0 : A1;
+        // Determine if current A is correct. The logic in _get_A matches this.
+        // A is based on the current state balances.
+
         uint256 D = CurveMath.get_D(xpBefore, currentA);
         uint256 thresholdXP = D / N_COINS;
 
@@ -234,96 +336,251 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
             uint256 dx1Normalized = dx1 * tokenMultipliers[i];
             uint256 x1 = xp1[i] + dx1Normalized;
             uint256 y1 = CurveMath.get_y(i, j, x1, xp1, currentA);
+            require(y1 > 0, "KinkPool: Convergence failed"); // Fix #2
             uint256 dy1Normalized = xp1[j] - y1;
 
             // Apply baseFee to the converging part
-            uint256 dy1Fee = (dy1Normalized * baseFee) / FEE_DENOMINATOR;
-            dy1Normalized -= dy1Fee;
+            uint256 dy1FeeTotal = (dy1Normalized * baseFee) / FEE_DENOMINATOR;
+
+            // Calculate admin share
+            uint256 adminShare1 = (dy1FeeTotal * baseFeeShare) / FEE_DENOMINATOR;
+            // Denormalize admin share to token units
+            if (adminShare1 > 0) {
+                adminFeeAmount += adminShare1 / tokenMultipliers[j];
+            }
+
+            dy1Normalized -= dy1FeeTotal;
 
             uint256 dy1 = dy1Normalized / tokenMultipliers[j];
 
             // Update balances to reflect first swap outcome
             xp1[i] = x1;
-            xp1[j] = xpBefore[j] - dy1Normalized; // Important: reduce by actual output without fee?
-            // Wait, xp1[j] should represent the internal "ideal" balance before fee was taken out?
-            // Actually, for calculating the next step, we should assume the pool has LESS tokens (the output was removed).
-            // The fee remains in the pool.
-            // So pool balance = old_y - dy_user = old_y - (dy - fee) = y + fee.
-            // y1 is the theoretical new balance if no fee.
-            // So we set xp1[j] = y1 + dy1Fee.
-
-            xp1[j] = y1 + dy1Fee;
+            xp1[j] = xpBefore[j] - dy1Normalized - adminShare1;
 
             // Second swap with target A (opposite side)
-            uint256 targetA = i == 0 ? A1 : A0;
+            uint256 targetA = i == 0 ? A0 : A1; // Fix #3: i=0 means token0 input, so we become token0 heavy -> A0
             uint256[N_COINS] memory xp2 = xp1;
             uint256 dx2Normalized = dx2 * tokenMultipliers[i];
             uint256 x2 = xp2[i] + dx2Normalized;
             uint256 y2 = CurveMath.get_y(i, j, x2, xp2, targetA);
+            require(y2 > 0, "KinkPool: Convergence failed"); // Fix #2
             uint256 dy2Normalized = xp2[j] - y2;
 
-            // Apply fee to the diverging part based on soft peg
-            // Calculate effective price of this chunk: dy/dx
-            // If price < softPeg, apply kinkingFee, else baseFee
-            uint256 currentFee = baseFee;
-            if (dx2Normalized > 0) {
-                uint256 price = (dy2Normalized * 1e18) / dx2Normalized;
-                uint256 peg = i == 0 ? softPeg0 : softPeg1; // i is input token index
-                // If i=0 (token0 input), we are selling token0.
-                // Diverging means token0 is weak.
-                // We check if price (token1 per token0) < softPeg0 (token0's value).
+            // Apply fee to the diverging part based on soft peg logic
+            // The diverging part starts at equilibrium (price ~ 1.0).
+            // If softPeg < 1.0, we start in the "good" zone (price > softPeg).
+            // We check if the swap pushes price below softPeg.
 
-                if (price < peg) {
-                    currentFee = kinkingFee;
+            uint256 peg = i == 0 ? softPeg0 : softPeg1;
+            uint256 fee = baseFee;
+
+            if (dx2Normalized > 0) {
+                // Check marginal price at the end of the swap
+                // x2 is the end state of input token balance
+                uint256 endPrice = _get_marginal_price(i, j, x2, xp2, targetA);
+
+                if (endPrice < peg) {
+                    // We crossed the peg.
+                    // We assume we started above peg (since we started at equilibrium ~1.0).
+                    // Find the split point.
+                    uint256 startPrice = _get_marginal_price(i, j, xp2[i], xp2, targetA);
+
+                    if (startPrice > peg) {
+                        // Fix #2: Use binary search instead of linear interpolation
+                        uint256 dxSplitNormalized = _find_crossing_dx(i, j, xp2[i], xp2, targetA, peg, dx2Normalized);
+
+                        // Safety check
+                        if (dxSplitNormalized > dx2Normalized) dxSplitNormalized = dx2Normalized;
+
+                        // Split calculations
+                        // 1. Base fee part
+                        uint256 xSplit = xp2[i] + dxSplitNormalized;
+                        uint256 ySplit = CurveMath.get_y(i, j, xSplit, xp2, targetA);
+                        uint256 dySplitNormalized = xp2[j] - ySplit;
+
+                        // 2. Kinking fee part (remaining)
+                        // Total dy (dy2Normalized) is already calculated as xp2[j] - y2.
+                        // Remaining dy = dy2Normalized - dySplitNormalized
+                        uint256 dyRestNormalized = dy2Normalized - dySplitNormalized;
+
+                        // Apply fees
+                        uint256 feeBasePart = (dySplitNormalized * baseFee) / FEE_DENOMINATOR;
+                        uint256 feeKinkPart = (dyRestNormalized * kinkingFee) / FEE_DENOMINATOR;
+                        uint256 totalFee = feeBasePart + feeKinkPart;
+
+                        // Admin share
+                        uint256 adminShareBase = (feeBasePart * baseFeeShare) / FEE_DENOMINATOR;
+                        uint256 adminShareKink = (feeKinkPart * kinkingFeeShare) / FEE_DENOMINATOR;
+                        uint256 totalAdminShare = adminShareBase + adminShareKink;
+
+                        if (totalAdminShare > 0) {
+                            adminFeeAmount += totalAdminShare / tokenMultipliers[j];
+                        }
+
+                        dy2Normalized -= totalFee;
+
+                    } else {
+                        // Started below peg? (Unlikely for diverging from equilibrium, but possible if peg > 1.0)
+                        fee = kinkingFee;
+                        uint256 dy2FeeTotal = (dy2Normalized * fee) / FEE_DENOMINATOR;
+                        uint256 adminShare2 = (dy2FeeTotal * kinkingFeeShare) / FEE_DENOMINATOR;
+                         if (adminShare2 > 0) {
+                            adminFeeAmount += adminShare2 / tokenMultipliers[j];
+                        }
+                        dy2Normalized -= dy2FeeTotal;
+                    }
+                } else {
+                    // End price >= peg. Whole swap is base fee.
+                    uint256 dy2FeeTotal = (dy2Normalized * baseFee) / FEE_DENOMINATOR;
+                    uint256 adminShare2 = (dy2FeeTotal * baseFeeShare) / FEE_DENOMINATOR;
+                    if (adminShare2 > 0) {
+                        adminFeeAmount += adminShare2 / tokenMultipliers[j];
+                    }
+                    dy2Normalized -= dy2FeeTotal;
                 }
             }
-
-            uint256 dy2Fee = (dy2Normalized * currentFee) / FEE_DENOMINATOR;
-            dy2Normalized -= dy2Fee;
 
             uint256 dy2 = dy2Normalized / tokenMultipliers[j];
             dy = dy1 + dy2;
         } else {
             // Standard swap
-            // Check convergence based on PRE-SWAP state
-            // If we didn't cross, the entire swap is either converging or diverging based on start state.
-            // Exception: if we were EXACTLY at equilibrium?
-            // If xp[i] == xp[j], we are diverging immediately.
-
             bool converging = false;
             if (xpBefore[i] < xpBefore[j]) {
                 converging = true;
-            }
-            // If equal or greater, converging = false (diverging).
-
-            uint256 fee = baseFee;
-            if (!converging) {
-                // Diverging
-                // We calculate fee after calculating dyNormalized below
             }
 
             uint256 dxNormalized = actualDx * tokenMultipliers[i];
             uint256 x = xpBefore[i] + dxNormalized;
             uint256 y = CurveMath.get_y(i, j, x, xpBefore, currentA);
+            require(y > 0, "KinkPool: Convergence failed"); // Fix #2
             uint256 dyNormalized = xpBefore[j] - y;
 
             if (!converging) {
+                 uint256 peg = i == 0 ? softPeg0 : softPeg1;
+                 uint256 fee = baseFee;
+
                  if (dxNormalized > 0) {
-                    uint256 price = (dyNormalized * 1e18) / dxNormalized;
-                    uint256 peg = i == 0 ? softPeg0 : softPeg1;
-                    if (price < peg) {
-                        fee = kinkingFee;
+                    uint256 endPrice = _get_marginal_price(i, j, x, xpBefore, currentA);
+
+                    if (endPrice < peg) {
+                        // Check start price
+                        uint256 startPrice = _get_marginal_price(i, j, xpBefore[i], xpBefore, currentA);
+
+                        if (startPrice > peg) {
+                            // Fix #2: Use binary search instead of linear interpolation
+                            uint256 dxSplitNormalized = _find_crossing_dx(i, j, xpBefore[i], xpBefore, currentA, peg, dxNormalized);
+
+                            // Split
+                            uint256 xSplit = xpBefore[i] + dxSplitNormalized;
+                            uint256 ySplit = CurveMath.get_y(i, j, xSplit, xpBefore, currentA);
+                            uint256 dySplitNormalized = xpBefore[j] - ySplit;
+                            uint256 dyRestNormalized = dyNormalized - dySplitNormalized;
+
+                            uint256 feeBasePart = (dySplitNormalized * baseFee) / FEE_DENOMINATOR;
+                            uint256 feeKinkPart = (dyRestNormalized * kinkingFee) / FEE_DENOMINATOR;
+                            uint256 totalFee = feeBasePart + feeKinkPart;
+
+                            uint256 adminShareBase = (feeBasePart * baseFeeShare) / FEE_DENOMINATOR;
+                            uint256 adminShareKink = (feeKinkPart * kinkingFeeShare) / FEE_DENOMINATOR;
+                            uint256 totalAdminShare = adminShareBase + adminShareKink;
+
+                            if (totalAdminShare > 0) {
+                                adminFeeAmount += totalAdminShare / tokenMultipliers[j];
+                            }
+                            dyNormalized -= totalFee;
+
+                        } else {
+                            // Started below peg
+                            fee = kinkingFee;
+                            uint256 dyFeeTotal = (dyNormalized * fee) / FEE_DENOMINATOR;
+                            uint256 adminShare = (dyFeeTotal * kinkingFeeShare) / FEE_DENOMINATOR;
+                            if (adminShare > 0) {
+                                adminFeeAmount += adminShare / tokenMultipliers[j];
+                            }
+                            dyNormalized -= dyFeeTotal;
+                        }
+                    } else {
+                        // End price >= peg. Base fee.
+                        uint256 dyFeeTotal = (dyNormalized * baseFee) / FEE_DENOMINATOR;
+                        uint256 adminShare = (dyFeeTotal * baseFeeShare) / FEE_DENOMINATOR;
+                        if (adminShare > 0) {
+                            adminFeeAmount += adminShare / tokenMultipliers[j];
+                        }
+                        dyNormalized -= dyFeeTotal;
                     }
                  }
             } else {
-                fee = baseFee;
+                // Converging
+                uint256 dyFeeTotal = (dyNormalized * baseFee) / FEE_DENOMINATOR;
+                uint256 adminShare = (dyFeeTotal * baseFeeShare) / FEE_DENOMINATOR;
+                if (adminShare > 0) {
+                    adminFeeAmount += adminShare / tokenMultipliers[j];
+                }
+                dyNormalized -= dyFeeTotal;
             }
 
-            // Apply fee on the normalized output delta
-            uint256 dyFee = (dyNormalized * fee) / FEE_DENOMINATOR;
-            dyNormalized -= dyFee;
-
             dy = dyNormalized / tokenMultipliers[j];
+        }
+    }
+
+    /**
+     * @notice Calculate output amount for a given input (view only)
+     * @param i Index of input token (0 or 1)
+     * @param j Index of output token (0 or 1)
+     * @param dx Input amount
+     * @return dy Output amount
+     */
+    function get_dy(uint256 i, uint256 j, uint256 dx) external view returns (uint256 dy) {
+        require(i != j && i < N_COINS && j < N_COINS, "KinkPool: Invalid indices");
+        require(dx > 0, "KinkPool: Zero input");
+
+        uint256[N_COINS] memory balances = _balances();
+        uint256[N_COINS] memory xpBefore = _xp(balances);
+
+        (dy, ) = _calculate_exchange(i, j, dx, xpBefore);
+    }
+
+    /**
+     * @notice Execute a swap
+     * @param i Index of input token (0 or 1)
+     * @param j Index of output token (0 or 1)
+     * @param dx Input amount
+     * @param min_dy Minimum output amount (slippage protection)
+     * @return dy Output amount
+     */
+    function exchange(
+        uint256 i,
+        uint256 j,
+        uint256 dx,
+        uint256 min_dy
+    ) external nonReentrant returns (uint256 dy) {
+        require(i != j && i < N_COINS && j < N_COINS, "KinkPool: Invalid indices");
+        require(dx > 0, "KinkPool: Zero input");
+
+        IERC20 inputToken = i == 0 ? IERC20(token0) : IERC20(token1);
+        IERC20 outputToken = j == 0 ? IERC20(token0) : IERC20(token1);
+
+        uint256[N_COINS] memory reservesBefore = _balances();
+
+        // Fix #1: Use raw balance for input calculation to prevent admin fee theft
+        uint256 inputBalanceBefore = IERC20(address(inputToken)).balanceOf(address(this));
+
+        // Transfer input tokens
+        inputToken.safeTransferFrom(msg.sender, address(this), dx);
+
+        uint256 inputBalanceAfter = IERC20(address(inputToken)).balanceOf(address(this));
+        require(inputBalanceAfter > inputBalanceBefore, "KinkPool: Insufficient input");
+        uint256 actualDx = inputBalanceAfter - inputBalanceBefore;
+
+        uint256[N_COINS] memory xpBefore = _xp(reservesBefore);
+
+        uint256 adminAmount;
+        (dy, adminAmount) = _calculate_exchange(i, j, actualDx, xpBefore);
+
+        // Update admin fees
+        if (adminAmount > 0) {
+            if (j == 0) adminFee0 += adminAmount;
+            else adminFee1 += adminAmount;
         }
 
         require(dy >= min_dy, "KinkPool: Slippage");
@@ -348,6 +605,8 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
 
     /**
      * @notice Add liquidity to the pool
+     * @dev Mitigates A-Switch valuation attacks by forcing the use of the higher A
+     *      when crossing equilibrium.
      * @param amounts Array of amounts to add [token0, token1]
      * @param min_lp Minimum LP tokens to mint (slippage protection)
      * @return lpAmount Amount of LP tokens minted
@@ -370,12 +629,12 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
         }
 
         uint256[N_COINS] memory balancesAfter = _balances();
-        uint256 currentA = _get_current_A();
 
         uint256[N_COINS] memory xpAfter = _xp(balancesAfter);
+        uint256 A_new = _get_A(xpAfter);
 
         if (totalSupply == 0) {
-            uint256 D1 = CurveMath.get_D(xpAfter, currentA);
+            uint256 D1 = CurveMath.get_D(xpAfter, A_new);
             require(D1 > 0, "KinkPool: Invalid D");
             lpAmount = D1;
             require(lpAmount > MINIMUM_LIQUIDITY, "KinkPool: Insufficient liquidity minted");
@@ -385,8 +644,15 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
             lpAmount -= MINIMUM_LIQUIDITY;
         } else {
             uint256[N_COINS] memory xpBefore = _xp(balancesBefore);
-            uint256 D0 = CurveMath.get_D(xpBefore, currentA);
-            uint256 D1 = CurveMath.get_D(xpAfter, currentA);
+            uint256 A_old = _get_A(xpBefore);
+
+            // Use the MAX A for the calculation to prevent valuation arbitrage
+            // If we move Low -> High, we use High (suppresses minting).
+            // If we move High -> Low, we use High (suppresses minting).
+            uint256 A_calc = A_old > A_new ? A_old : A_new;
+
+            uint256 D0 = CurveMath.get_D(xpBefore, A_calc);
+            uint256 D1 = CurveMath.get_D(xpAfter, A_calc);
             require(D1 > D0, "KinkPool: D must increase");
 
             // Calculate LP tokens to mint
@@ -446,30 +712,40 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
     ) external view returns (uint256) {
         uint256[N_COINS] memory balances = _balances();
         uint256 totalSupply = totalSupply();
-        uint256 currentA = _get_current_A();
-        uint256[N_COINS] memory xp = _xp(balances);
-        uint256 D0 = CurveMath.get_D(xp, currentA);
+
+        uint256[N_COINS] memory xpBefore = _xp(balances);
+        uint256 A_old = _get_A(xpBefore);
 
         uint256[N_COINS] memory new_balances = balances;
         for (uint256 i = 0; i < N_COINS; i++) {
             if (is_deposit) {
                 new_balances[i] += amounts[i];
             } else {
-                // Logic for withdrawal would differ, but here we focus on deposit estimation
+                // Logic for withdrawal would differ
                 if (amounts[i] > new_balances[i]) return 0;
                 new_balances[i] -= amounts[i];
             }
         }
 
         uint256[N_COINS] memory xpAfter = _xp(new_balances);
-        uint256 D1 = CurveMath.get_D(xpAfter, currentA);
+        uint256 A_new = _get_A(xpAfter);
 
         if (totalSupply == 0) {
+            uint256 D1 = CurveMath.get_D(xpAfter, A_new);
             if (D1 <= MINIMUM_LIQUIDITY) return 0;
             return D1 - MINIMUM_LIQUIDITY;
         }
 
-        return (totalSupply * (D1 - D0)) / D0;
+        // Use Max A logic
+        uint256 A_calc = A_old > A_new ? A_old : A_new;
+        uint256 D0 = CurveMath.get_D(xpBefore, A_calc);
+        uint256 D1 = CurveMath.get_D(xpAfter, A_calc);
+
+        if (D1 > D0) {
+             return (totalSupply * (D1 - D0)) / D0;
+        } else {
+             return (totalSupply * (D0 - D1)) / D0;
+        }
     }
 
     /**
@@ -478,8 +754,9 @@ contract KinkPool is ERC20, ReentrancyGuard, Initializable {
      * @return reserve1 Reserve of token1
      */
     function getReserves() external view returns (uint256 reserve0, uint256 reserve1) {
-        reserve0 = IERC20(token0).balanceOf(address(this));
-        reserve1 = IERC20(token1).balanceOf(address(this));
+        uint256[N_COINS] memory balances = _balances();
+        reserve0 = balances[0];
+        reserve1 = balances[1];
     }
 
     /**

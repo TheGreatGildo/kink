@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "../KinkPool.sol";
 import "../KinkFactory.sol";
+import "../PoolRegistry.sol";
 import "../mocks/MockERC20.sol";
 import "../mocks/FeeOnTransferToken.sol";
 
@@ -21,7 +22,9 @@ contract KinkPoolEchidna {
         token0 = new FeeOnTransferToken("Fee Token", "FEE", 100); // 1% burn
         token1 = new MockERC20("Token1", "T1");
 
-        KinkFactory factory = new KinkFactory();
+        PoolRegistry registry = new PoolRegistry(address(this), address(0));
+        KinkFactory factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         address poolAddress = factory.createPool(address(token0), address(token1), 100, 200, 4, 10, 2e18, 2e18);
         pool = KinkPool(poolAddress);
 

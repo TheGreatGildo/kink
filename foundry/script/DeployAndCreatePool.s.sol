@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/KinkFactory.sol";
 import "../src/KinkRouter.sol";
+import "../src/PoolRegistry.sol";
 import "../src/KinkPool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -18,14 +19,19 @@ contract DeployAndCreatePool is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy Factory
+        // 1. Deploy Factory + Registry
+        console.log("Deploying PoolRegistry...");
+        PoolRegistry registry = new PoolRegistry(deployer, address(0));
+        console.log("PoolRegistry deployed at:", address(registry));
+
         console.log("Deploying KinkFactory...");
-        KinkFactory factory = new KinkFactory();
+        KinkFactory factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         console.log("KinkFactory deployed at:", address(factory));
 
         // 2. Deploy Router
         console.log("Deploying KinkRouter...");
-        KinkRouter router = new KinkRouter(address(factory));
+        KinkRouter router = new KinkRouter(address(registry));
         console.log("KinkRouter deployed at:", address(router));
 
         // 3. Create Pool
@@ -107,6 +113,7 @@ contract DeployAndCreatePool is Script {
         // Output for processing
         console.log("JSON_OUTPUT_START");
         console.log("{");
+        console.log(string.concat('"REGISTRY_ADDRESS": "', vm.toString(address(registry)), '",'));
         console.log(string.concat('"FACTORY_ADDRESS": "', vm.toString(address(factory)), '",'));
         console.log(string.concat('"ROUTER_ADDRESS": "', vm.toString(address(router)), '",'));
         console.log(string.concat('"POOL_ADDRESS": "', vm.toString(poolAddress), '"'));

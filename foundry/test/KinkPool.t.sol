@@ -4,11 +4,13 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/KinkPool.sol";
 import "../src/KinkFactory.sol";
+import "../src/PoolRegistry.sol";
 import "../src/mocks/MockERC20.sol";
 
 contract KinkPoolTest is Test {
     KinkPool pool;
     KinkFactory factory;
+    PoolRegistry registry;
     MockERC20 token0;
     MockERC20 token1;
     address user1 = address(0x1);
@@ -25,7 +27,10 @@ contract KinkPoolTest is Test {
         token1 = new MockERC20("Token1", "T1");
 
         // Deploy factory and create pool through it
-        factory = new KinkFactory();
+        registry = new PoolRegistry(address(this), address(0));
+        factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
+        // Initialize with 0 fee shares
         address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         pool = KinkPool(poolAddress);
 
@@ -67,17 +72,24 @@ contract KinkPoolTest is Test {
         // Factory will sort tokens, so this test checks factory behavior
         address poolAddress = factory.createPool(address(newToken1), address(newToken0), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         KinkPool newPool = KinkPool(poolAddress);
+        (address expectedToken0, address expectedToken1) =
+            address(newToken0) < address(newToken1) ? (address(newToken0), address(newToken1)) : (address(newToken1), address(newToken0));
         // Tokens should be sorted by factory
-        assertEq(newPool.token0(), address(newToken0));
-        assertEq(newPool.token1(), address(newToken1));
+        assertEq(newPool.token0(), expectedToken0);
+        assertEq(newPool.token1(), expectedToken1);
     }
 
     function testInitialize_RevertIfInvalidA0() public {
         // Create new tokens to avoid pool exists error
         MockERC20 newToken0 = new MockERC20("NewToken0", "NT0");
         MockERC20 newToken1 = new MockERC20("NewToken1", "NT1");
-        vm.expectRevert("KinkPool: Invalid A0");
-        factory.createPool(address(newToken0), address(newToken1), 1, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
+        if (address(newToken0) < address(newToken1)) {
+            vm.expectRevert("KinkPool: Invalid A0");
+            factory.createPool(address(newToken0), address(newToken1), 1, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
+        } else {
+            vm.expectRevert("KinkPool: Invalid A0");
+            factory.createPool(address(newToken0), address(newToken1), A1, 1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
+        }
     }
 
     function testAddLiquidity_FirstDeposit() public {
@@ -402,6 +414,68 @@ contract KinkPoolTest is Test {
         poolToken1.approve(address(pool), type(uint256).max);
         pool.add_liquidity(initialAmounts, 0);
         vm.stopPrank();
+    }
+
+    function testAdminControls() public {
+        // Verify admin is set correctly
+        assertEq(pool.admin(), address(this));
+
+        // Update fee shares on factory
+        factory.setProtocolFees(address(this), 5000, 5000); // 50% split
+        assertEq(factory.baseFeeShare(), 5000);
+        assertEq(factory.kinkingFeeShare(), 5000);
+
+        // Verify only factory owner can update
+        vm.startPrank(user1);
+        vm.expectRevert();
+        factory.setProtocolFees(address(this), 1000, 1000);
+        vm.stopPrank();
+
+        // Change pool admin (for pool specific controls like pausing if implemented)
+        pool.transferOwnership(user1);
+        assertEq(pool.pendingAdmin(), user1);
+    }
+
+    function testAdminFeesCollection() public {
+        // Set 50% fee share on factory
+        factory.setProtocolFees(address(this), 5000, 5000);
+
+        // Add liquidity
+        _bootstrapBalancedLiquidity();
+
+        address poolToken0 = pool.token0();
+        address poolToken1 = pool.token1();
+        IERC20 tokenIn = IERC20(poolToken0);
+
+        // Perform swap
+        vm.startPrank(user2);
+        uint256 amountIn = 1000e18;
+        if (tokenIn.balanceOf(user2) < amountIn) {
+            MockERC20(poolToken0).mint(user2, amountIn);
+        }
+        tokenIn.approve(address(pool), amountIn);
+        pool.exchange(0, 1, amountIn, 0);
+        vm.stopPrank();
+
+        // Check accumulated fees
+        uint256 fee0 = pool.adminFee0();
+        uint256 fee1 = pool.adminFee1();
+        // Should have some fees in one of the tokens (depending on swap direction and convergence)
+        // We swapped 0 -> 1.
+        // If converging (0 < 1), fee is on output (1). So fee1 > 0.
+        // If diverging (0 > 1), fee is on output (1). So fee1 > 0.
+        // Wait, fee is always taken from output token in exchange() logic.
+        // So we expect adminFee1 > 0.
+        assertGt(fee1, 0, "Should have accumulated admin fees in token1");
+        assertEq(fee0, 0, "Should have no fees in token0");
+
+        // Collect fees
+        uint256 adminBalBefore = IERC20(poolToken1).balanceOf(address(this));
+        pool.collectFees();
+        uint256 adminBalAfter = IERC20(poolToken1).balanceOf(address(this));
+
+        assertEq(adminBalAfter - adminBalBefore, fee1, "Admin should receive collected fees");
+        assertEq(pool.adminFee1(), 0, "Accumulated fee should be reset");
     }
 
     function _expectedAmplifications() internal view returns (uint256 expectedA0, uint256 expectedA1) {

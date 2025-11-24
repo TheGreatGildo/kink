@@ -4,12 +4,14 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/KinkPool.sol";
 import "../src/KinkFactory.sol";
+import "../src/PoolRegistry.sol";
 import "../src/mocks/MockERC20.sol";
 import "../src/libraries/CurveMath.sol";
 
 contract FeeAnalysisTest is Test {
     KinkPool pool;
     KinkFactory factory;
+    PoolRegistry registry;
     MockERC20 token0;
     MockERC20 token1;
     address user1 = address(0x1);
@@ -29,8 +31,11 @@ contract FeeAnalysisTest is Test {
         token0 = new MockERC20("Token0", "T0");
         token1 = new MockERC20("Token1", "T1");
 
-        factory = new KinkFactory();
+        registry = new PoolRegistry(address(this), address(0));
+        factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         // Use symmetric A to simplify math, focus on fee logic
+        // Added admin fee shares as 0
         address poolAddress = factory.createPool(address(token0), address(token1), A0, A1, BASE_FEE, KINKING_FEE, SOFT_PEG, SOFT_PEG);
         pool = KinkPool(poolAddress);
 

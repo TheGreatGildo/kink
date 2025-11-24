@@ -97,6 +97,14 @@ const ENV_TOKENS: TokenInfo[] = ENV_TOKEN_CONFIGS.flatMap((config) => {
   const normalizedAddress = normalizeAddress(config.address);
   if (!normalizedAddress) return [];
 
+  // If this address already exists in our base registry, prefer the canonical metadata
+  const existingToken = BASE_TOKENS.find(
+    (token) => token.address.toLowerCase() === normalizedAddress
+  );
+  if (existingToken) {
+    return [];
+  }
+
   const referenceToken = BASE_TOKENS.find((token) => token.symbol === config.referenceSymbol);
 
   return [
@@ -111,7 +119,7 @@ const ENV_TOKENS: TokenInfo[] = ENV_TOKEN_CONFIGS.flatMap((config) => {
 });
 
 // Optimism Mainnet stablecoins with 18 decimals
-export const OPTIMISM_STABLECOINS: TokenInfo[] = [...ENV_TOKENS, ...BASE_TOKENS];
+export const OPTIMISM_STABLECOINS: TokenInfo[] = [...BASE_TOKENS, ...ENV_TOKENS];
 
 // Helper function to format address
 function shortAddress(address: string): string {

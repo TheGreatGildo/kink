@@ -2,13 +2,15 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/proxy/Clones.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./KinkPool.sol";
+import "./PoolRegistry.sol";
 
 /**
  * @title KinkFactory
  * @notice Factory for creating KinkPool instances using minimal proxy pattern
  */
-contract KinkFactory {
+contract KinkFactory is Ownable {
     using Clones for address;
 
     /// @notice Implementation contract address
@@ -20,6 +22,15 @@ contract KinkFactory {
     /// @notice Mapping from token pair to pool address
     mapping(address => mapping(address => address[])) public getPools;
     mapping(bytes32 => address) public getPool;
+    mapping(address => bool) public isPool;
+
+    /// @notice Protocol fee configuration
+    address public feeReceiver;
+    uint256 public baseFeeShare;
+    uint256 public kinkingFeeShare;
+    uint256 public constant MAX_FEE_SHARE = 5000; // 50%
+
+    PoolRegistry public immutable registry;
 
     event PoolCreated(
         address indexed token0,
@@ -33,9 +44,38 @@ contract KinkFactory {
         uint256 softPeg1
     );
 
-    constructor() {
+    event ProtocolFeesUpdated(
+        address indexed feeReceiver,
+        uint256 baseFeeShare,
+        uint256 kinkingFeeShare
+    );
+
+    constructor(address _registry) Ownable(msg.sender) {
         // Deploy standalone implementation that clones can initialize
         implementation = address(new KinkPool());
+        registry = PoolRegistry(_registry);
+    }
+
+    /**
+     * @notice Update protocol fee configuration
+     * @param _feeReceiver Address to receive protocol fees
+     * @param _baseFeeShare Admin share of base fee in bps
+     * @param _kinkingFeeShare Admin share of kinking fee in bps
+     */
+    function setProtocolFees(
+        address _feeReceiver,
+        uint256 _baseFeeShare,
+        uint256 _kinkingFeeShare
+    ) external onlyOwner {
+        require(_baseFeeShare <= MAX_FEE_SHARE, "KinkFactory: Fee share too high");
+        require(_kinkingFeeShare <= MAX_FEE_SHARE, "KinkFactory: Fee share too high");
+        require(_feeReceiver != address(0) || (_baseFeeShare == 0 && _kinkingFeeShare == 0), "KinkFactory: Zero address receiver");
+
+        feeReceiver = _feeReceiver;
+        baseFeeShare = _baseFeeShare;
+        kinkingFeeShare = _kinkingFeeShare;
+
+        emit ProtocolFeesUpdated(_feeReceiver, _baseFeeShare, _kinkingFeeShare);
     }
 
     /**
@@ -81,6 +121,7 @@ contract KinkFactory {
                 ? (tokenA, tokenB, _A0, _A1, _softPeg0, _softPeg1)
                 : (tokenB, tokenA, _A1, _A0, _softPeg1, _softPeg0);
 
+        // Hash must include new fee shares to ensure uniqueness if they differ
         bytes32 paramsHash = keccak256(abi.encodePacked(token0, token1, A0Param, A1Param, _baseFee, _kinkingFee, peg0, peg1));
         require(getPool[paramsHash] == address(0), "KinkFactory: Pool exists");
 
@@ -92,9 +133,14 @@ contract KinkFactory {
         getPools[token0][token1].push(pool);
         getPools[token1][token0].push(pool); // Reverse mapping
         allPools.push(pool);
+        isPool[pool] = true;
 
         // Initialize pool
-        KinkPool(pool).initialize(token0, token1, A0Param, A1Param, _baseFee, _kinkingFee, peg0, peg1);
+        // Pass msg.sender as admin (or factory could be admin if desired, but user usually wants control)
+        // Here we set msg.sender (the deployer) as the admin.
+        KinkPool(pool).initialize(token0, token1, A0Param, A1Param, _baseFee, _kinkingFee, peg0, peg1, msg.sender);
+
+        registry.registerPool(token0, token1, pool);
 
         emit PoolCreated(token0, token1, pool, A0Param, A1Param, _baseFee, _kinkingFee, peg0, peg1);
     }

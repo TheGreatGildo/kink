@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 import "../src/KinkFactory.sol";
 import "../src/KinkRouter.sol";
+import "../src/PoolRegistry.sol";
 import "../src/KinkPool.sol";
 import "../src/mocks/MockERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -35,12 +36,14 @@ contract DeployAndInitialize is Script {
 
         // 1. Deploy Factory
         console.log("\n[1/3] Deploying KinkFactory...");
-        KinkFactory factory = new KinkFactory();
+        PoolRegistry registry = new PoolRegistry(msg.sender, address(0));
+        KinkFactory factory = new KinkFactory(address(registry));
+        registry.setFactory(address(factory));
         console.log("[OK] KinkFactory deployed at:", address(factory));
 
         // 2. Deploy Router
         console.log("\n[2/3] Deploying KinkRouter...");
-        KinkRouter router = new KinkRouter(address(factory));
+        KinkRouter router = new KinkRouter(address(registry));
         console.log("[OK] KinkRouter deployed at:", address(router));
 
         // 3. Deploy mock tokens (DEFI & CEFI) for this environment
@@ -77,9 +80,6 @@ contract DeployAndInitialize is Script {
 
         uint256 baseFee = 4;      // 0.04% = 4 basis points
         uint256 kinkingFee = 25;  // 0.25% = 25 basis points
-
-        // No soft peg for CEFI (set to 0 or very low, or just > 1e18? Actually 0 disables it effectively if we check < softPeg)
-        // Wait, if price < softPeg. If softPeg is 0, price is never < 0 (unsigned). So 0 disables it.
         uint256 softPegCEFI = 0;
         uint256 softPegDEFI = 0.99e18; // 0.99
 
@@ -92,7 +92,16 @@ contract DeployAndInitialize is Script {
         console.log("  Soft Peg DEFI:", softPegDEFI);
 
         // createPool(tokenA, tokenB, A(A>B), A(B>A), ...)
-        address pool = factory.createPool(CEFI, DEFI, A_CEFI_Heavy, A_DEFI_Heavy, baseFee, kinkingFee, softPegCEFI, softPegDEFI);
+        address pool = factory.createPool(
+            CEFI,
+            DEFI,
+            A_CEFI_Heavy,
+            A_DEFI_Heavy,
+            baseFee,
+            kinkingFee,
+            softPegCEFI,
+            softPegDEFI
+        );
         console.log("[OK] Pool created at:", pool);
 
         // Verify pool initialization
