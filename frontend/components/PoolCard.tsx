@@ -6,9 +6,7 @@ import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { TokenLogo } from './TokenLogo';
 import { usePoolData } from '@/hooks/usePoolData';
 import { formatUnits } from 'viem';
-
-const shortAddress = (address: string) =>
-  `${address.slice(0, 6)}...${address.slice(-4)}`;
+import { AddressDisplay } from './AddressDisplay';
 
 interface PoolCardProps {
   pool: Pool;
@@ -41,8 +39,12 @@ export function PoolCard({ pool, isActive, onSelect }: PoolCardProps) {
   const formatAmplification = (value?: bigint) =>
     typeof value === 'bigint' ? Number(value).toLocaleString() : '—';
 
-  const formatSoftPeg = (value: bigint) =>
-    value > 0n ? (Number(value) / 1e18).toFixed(4) : '—';
+  const formatSoftPeg = (value: bigint) => {
+    if (value === 0n) return '—';
+    const normalized = Number(value) / 1e18;
+    // Values >= 100 indicate softPeg is not set (disabled)
+    return normalized >= 100 ? '—' : normalized.toFixed(4);
+  };
 
   return (
     <article
@@ -68,9 +70,14 @@ export function PoolCard({ pool, isActive, onSelect }: PoolCardProps) {
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-muted-foreground">
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-muted px-3 py-1 text-[0.65rem]">Pool</span>
-              <code className="rounded-md bg-muted/50 px-2 py-1 text-[0.65rem] font-mono">
-                {shortAddress(pool.poolAddress)}
-              </code>
+              <div className="rounded-md bg-muted/50 px-2 py-1 text-[0.65rem]">
+                <AddressDisplay
+                  address={pool.poolAddress}
+                  className="text-foreground"
+                  startChars={6}
+                  endChars={4}
+                />
+              </div>
             </div>
             <span className="rounded-full border border-border/60 px-3 py-1 text-[0.65rem]">
               AMP CURVE

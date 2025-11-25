@@ -8,7 +8,7 @@ import { DEPLOYED_POOL, REGISTRY_ADDRESS } from '../config/chains';
 import { getTokenInfo, type TokenInfo } from '../lib/tokens';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-const REFRESH_INTERVAL_MS = 15_000;
+const REFRESH_INTERVAL_MS = 60_000; // Increased from 15s to 60s to reduce RPC calls
 
 const POOL_REGISTRY_ABI = [
   {
@@ -107,6 +107,7 @@ export function usePools(registryAddressOverride?: string) {
 
   useEffect(() => {
     let cancelled = false;
+    let isInitialLoad = true;
 
     async function loadPoolsFromRegistry() {
       if (!publicClient || !isValidAddress(registryAddress)) {
@@ -117,13 +118,19 @@ export function usePools(registryAddressOverride?: string) {
         return;
       }
 
-      if (!cancelled) setLoading(true);
+      // Only show loading spinner on initial load, not on refresh
+      if (isInitialLoad && !cancelled) {
+        setLoading(true);
+      }
 
       try {
         const poolAddresses = await fetchRegisteredPools(publicClient, registryAddress as Address);
 
         if (poolAddresses.length === 0) {
-          if (!cancelled) setPools(fallbackPools);
+          if (!cancelled) {
+            setPools(fallbackPools);
+            if (isInitialLoad) setLoading(false);
+          }
           return;
         }
 
@@ -131,16 +138,16 @@ export function usePools(registryAddressOverride?: string) {
         const resolved = metadata.filter((pool): pool is Pool => pool !== null);
         if (!cancelled) {
           setPools(mergePools(resolved, fallbackPools));
+          if (isInitialLoad) setLoading(false);
         }
       } catch (error) {
         console.warn('usePools: failed to load registry pools', error);
         if (!cancelled) {
           setPools(fallbackPools);
+          if (isInitialLoad) setLoading(false);
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        isInitialLoad = false;
       }
     }
 
@@ -202,16 +209,24 @@ async function fetchRegisteredPools(client: PublicClientInstance, registryAddres
 
 async function fetchPoolMetadata(client: PublicClientInstance, poolAddress: Address) {
   try {
-    const [token0, token1, A0, A1, baseFee, kinkingFee, softPeg0, softPeg1] = await Promise.all([
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'token0' }),
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'token1' }),
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'A0' }),
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'A1' }),
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'baseFee' }),
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'kinkingFee' }),
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'softPeg0' }),
-      client.readContract({ address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'softPeg1' }),
-    ]);
+    // Use multicall to batch all RPC calls into a single request
+    const contracts = [
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'token0' },
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'token1' },
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'A0' },
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'A1' },
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'baseFee' },
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'kinkingFee' },
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'softPeg0' },
+      { address: poolAddress, abi: KINK_POOL_METADATA_ABI, functionName: 'softPeg1' },
+    ] as const;
+
+    const results = await client.multicall({
+      allowFailure: false,
+      contracts,
+    });
+
+    const [token0, token1, A0, A1, baseFee, kinkingFee, softPeg0, softPeg1] = results;
 
     return formatPoolEntry({
       token0,

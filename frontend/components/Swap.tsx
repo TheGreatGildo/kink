@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { usePoolData } from '../hooks/usePoolData';
 import { ROUTER_ADDRESS, DEPLOYED_POOL } from '../config/chains';
@@ -11,6 +11,7 @@ import { TokenLogo } from './TokenLogo';
 import { PoolStats } from './PoolStats';
 import { Button } from './ui/button';
 import { SwapIcon } from './Icons';
+import { AddressDisplay } from './AddressDisplay';
 
 const ROUTER_ABI = [
   {
@@ -46,6 +47,7 @@ interface SwapProps {
 
 export default function Swap({ poolAddress }: SwapProps) {
   const [inputAmount, setInputAmount] = useState('');
+  const [debouncedInputAmount, setDebouncedInputAmount] = useState('');
   const [inputToken, setInputToken] = useState(0);
   const [outputToken, setOutputToken] = useState(1);
   const [slippage, setSlippage] = useState(0.5);
@@ -60,6 +62,24 @@ export default function Swap({ poolAddress }: SwapProps) {
     softPegTriggered: false,
   });
   const [showInverseRate, setShowInverseRate] = useState(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounce input amount to reduce RPC calls while user is typing
+  useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedInputAmount(inputAmount);
+    }, 300); // 300ms debounce delay
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [inputAmount]);
 
   const poolData = usePoolData(poolAddress);
 
@@ -116,7 +136,8 @@ export default function Swap({ poolAddress }: SwapProps) {
   // Use actual token decimals instead of hardcoded 18
   const inputTokenDecimals = inputToken === 0 ? token0Meta.decimals : token1Meta.decimals;
   const outputTokenDecimals = outputToken === 0 ? token0Meta.decimals : token1Meta.decimals;
-  const amountIn = inputAmount ? BigInt(Math.floor(parseFloat(inputAmount) * 10 ** inputTokenDecimals)) : BigInt(0);
+  // Use debounced amount for RPC calls to reduce requests while typing
+  const amountIn = debouncedInputAmount ? BigInt(Math.floor(parseFloat(debouncedInputAmount) * 10 ** inputTokenDecimals)) : BigInt(0);
 
   const { data: routerOutput, refetch: refetchQuote } = useReadContract({
     address: ROUTER_ADDRESS as `0x${string}`,
@@ -129,11 +150,14 @@ export default function Swap({ poolAddress }: SwapProps) {
       amountIn,
     ],
     query: {
-      enabled: !!inputAmount && !!poolAddress && !!ROUTER_ADDRESS && amountIn > 0,
+      enabled: !!debouncedInputAmount && !!poolAddress && !!ROUTER_ADDRESS && amountIn > 0,
+      staleTime: 5_000, // 5 seconds - quotes can change frequently but we debounce input
+      gcTime: 30_000, // 30 seconds cache
     }
   });
 
-  // Fetch spot price quote (small amount)
+  // Fetch spot price quote (small amount) - only refetch when token selection changes, not on every render
+  const spotPriceAmount = useMemo(() => BigInt(10 ** Math.max(0, inputTokenDecimals - 2)), [inputTokenDecimals]);
   const { data: spotQuote } = useReadContract({
     address: ROUTER_ADDRESS as `0x${string}`,
     abi: ROUTER_ABI,
@@ -142,16 +166,56 @@ export default function Swap({ poolAddress }: SwapProps) {
       poolAddress as `0x${string}`,
       BigInt(inputToken),
       BigInt(outputToken),
-      BigInt(10 ** Math.max(0, inputTokenDecimals - 2)), // 0.01 unit
+      spotPriceAmount,
     ],
     query: {
-      enabled: !!poolAddress && !!ROUTER_ADDRESS,
+      enabled: !!poolAddress && !!ROUTER_ADDRESS && inputTokenDecimals > 0,
+      staleTime: 30_000, // 30 seconds - spot price doesn't need frequent updates
+      gcTime: 120_000, // 2 minutes cache
     }
   });
 
   useEffect(() => {
       if(spotQuote) setSpotPriceQuote(spotQuote);
   }, [spotQuote]);
+
+  // Get swap prices for display: 1 token 0 -> token 1
+  const oneToken0Amount = useMemo(() => BigInt(10 ** token0Meta.decimals), [token0Meta.decimals]);
+  const { data: price0to1 } = useReadContract({
+    address: ROUTER_ADDRESS as `0x${string}`,
+    abi: ROUTER_ABI,
+    functionName: 'getAmountsOut',
+    args: [
+      poolAddress as `0x${string}`,
+      BigInt(0), // token 0
+      BigInt(1), // token 1
+      oneToken0Amount,
+    ],
+    query: {
+      enabled: !!poolAddress && !!ROUTER_ADDRESS && token0Meta.decimals > 0 && token1Meta.decimals > 0,
+      staleTime: 30_000, // 30 seconds
+      gcTime: 120_000, // 2 minutes cache
+    }
+  });
+
+  // Get swap prices for display: 1 token 1 -> token 0
+  const oneToken1Amount = useMemo(() => BigInt(10 ** token1Meta.decimals), [token1Meta.decimals]);
+  const { data: price1to0 } = useReadContract({
+    address: ROUTER_ADDRESS as `0x${string}`,
+    abi: ROUTER_ABI,
+    functionName: 'getAmountsOut',
+    args: [
+      poolAddress as `0x${string}`,
+      BigInt(1), // token 1
+      BigInt(0), // token 0
+      oneToken1Amount,
+    ],
+    query: {
+      enabled: !!poolAddress && !!ROUTER_ADDRESS && token0Meta.decimals > 0 && token1Meta.decimals > 0,
+      staleTime: 30_000, // 30 seconds
+      gcTime: 120_000, // 2 minutes cache
+    }
+  });
 
   const { writeContract, data: hash, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
@@ -171,8 +235,9 @@ export default function Swap({ poolAddress }: SwapProps) {
   const reserve1 = poolData.reserves?.reserve1;
 
   useEffect(() => {
+    // Use debounced amount for calculations to reduce unnecessary recalculations
     if (
-      !inputAmount ||
+      !debouncedInputAmount ||
       reserve0 === undefined ||
       reserve1 === undefined ||
       !ROUTER_ADDRESS
@@ -183,7 +248,7 @@ export default function Swap({ poolAddress }: SwapProps) {
       return;
     }
 
-    const parsedAmount = BigInt(Math.floor(parseFloat(inputAmount) * 10 ** inputTokenDecimals));
+    const parsedAmount = BigInt(Math.floor(parseFloat(debouncedInputAmount) * 10 ** inputTokenDecimals));
 
       if (routerOutput !== undefined) {
         setExpectedOutput(routerOutput);
@@ -269,7 +334,7 @@ export default function Swap({ poolAddress }: SwapProps) {
             setSwapType(isConverging ? 'converging' : 'diverging');
         }
   }, [
-    inputAmount,
+    debouncedInputAmount,
     inputToken,
     outputToken,
     routerOutput,
@@ -286,8 +351,8 @@ export default function Swap({ poolAddress }: SwapProps) {
     if (
       reserve0 === undefined ||
       reserve1 === undefined ||
-      !inputAmount ||
-      parseFloat(inputAmount) <= 0
+      !debouncedInputAmount ||
+      parseFloat(debouncedInputAmount) <= 0
     ) {
       setFeeBreakdown({
         basePortionPct: 1,
@@ -305,7 +370,7 @@ export default function Swap({ poolAddress }: SwapProps) {
     const xp0 = reserve0 * m0;
     const xp1 = reserve1 * m1;
 
-    const amountIn = BigInt(Math.floor(parseFloat(inputAmount) * 10 ** inputTokenDecimals));
+    const amountIn = BigInt(Math.floor(parseFloat(debouncedInputAmount) * 10 ** inputTokenDecimals));
     if (amountIn <= 0n) {
       setFeeBreakdown({
         basePortionPct: 1,
@@ -347,6 +412,17 @@ export default function Swap({ poolAddress }: SwapProps) {
         ? (spotOutputNormalized * ONE_18) / spotInputNormalized
         : reservePrice;
 
+    // Check if softPeg is actually set (not disabled) - do this early to check current price
+    // softPeg values >= 100 (normalized) indicate it's disabled
+    const softPegNormalized = softPeg ? Number(softPeg) / Number(ONE_18) : 0;
+    const isSoftPegSet = softPeg && softPeg > 0n && softPegNormalized < 100;
+
+    // Current price before the swap
+    const currentPrice = spotPrice;
+
+    // If already below soft peg, entire trade uses kink fee
+    const alreadyBelowSoftPeg = isSoftPegSet && currentPrice < softPeg;
+
     let basePortion = 0n;
     let divergingPortion = amountNormalized;
     let convergingDx = 0n;
@@ -354,14 +430,23 @@ export default function Swap({ poolAddress }: SwapProps) {
     if (inIsConverging) {
       const toEquilibrium = threshold > xpInBefore ? threshold - xpInBefore : 0n;
       convergingDx = amountNormalized < toEquilibrium ? amountNormalized : toEquilibrium;
-      basePortion = convergingDx;
+      // If already below soft peg, even converging portion uses kink fee
+      if (alreadyBelowSoftPeg) {
+        // Don't add to basePortion - it will all be kink fee
+      } else {
+        basePortion = convergingDx;
+      }
       divergingPortion = amountNormalized > convergingDx ? amountNormalized - convergingDx : 0n;
     }
 
     let kinkPortion = 0n;
     let softPegTriggered = false;
 
-    if (divergingPortion > 0n && expectedOutput && dxNormalizedTotal > 0n) {
+    // If already below soft peg, entire trade is kink fee
+    if (alreadyBelowSoftPeg) {
+      kinkPortion = amountNormalized;
+      softPegTriggered = true;
+    } else if (divergingPortion > 0n && expectedOutput && dxNormalizedTotal > 0n) {
       const dxBase = convergingDx;
       const dxDiv = divergingPortion;
       const dyBase = (dyNormalizedTotal * dxBase) / dxNormalizedTotal;
@@ -377,13 +462,13 @@ export default function Swap({ poolAddress }: SwapProps) {
           ? (dyDiv * ONE_18) / dxDivNormalized
           : spotPrice;
 
-      if (softPeg && softPeg > 0n) {
-        if (priceStart <= softPeg) {
-          // Already below peg, entire portion uses base fee (matches contract behavior)
+      if (isSoftPegSet) {
+        // If we start above peg and end above peg, use base fee
+        if (priceStart >= softPeg && priceEnd >= softPeg) {
           basePortion += dxDiv;
-        } else if (priceEnd >= softPeg) {
-          basePortion += dxDiv;
-        } else {
+        }
+        // If we start above peg but end below peg, we cross the soft peg
+        else if (priceStart >= softPeg && priceEnd < softPeg) {
           softPegTriggered = true;
           const drop = priceStart > priceEnd ? priceStart - priceEnd : 0n;
           const distanceToPeg = priceStart - softPeg;
@@ -396,7 +481,13 @@ export default function Swap({ poolAddress }: SwapProps) {
             kinkPortion = dxDiv;
           }
         }
+        // If we start below peg (shouldn't happen if alreadyBelowSoftPeg check worked, but fallback)
+        else {
+          kinkPortion = dxDiv;
+          softPegTriggered = true;
+        }
       } else {
+        // No softPeg set, entire diverging portion uses base fee
         basePortion += dxDiv;
       }
     } else {
@@ -406,7 +497,11 @@ export default function Swap({ poolAddress }: SwapProps) {
     if (basePortion > amountNormalized) {
       basePortion = amountNormalized;
     }
-    kinkPortion = amountNormalized > basePortion ? amountNormalized - basePortion : 0n;
+
+    // Only recalculate kinkPortion if we haven't already set it based on soft peg logic
+    if (!alreadyBelowSoftPeg && kinkPortion === 0n) {
+      kinkPortion = amountNormalized > basePortion ? amountNormalized - basePortion : 0n;
+    }
     const total = amountNormalized === 0n ? 1n : amountNormalized;
     const basePct = Number(basePortion) / Number(total);
     const kinkPct = Number(kinkPortion) / Number(total);
@@ -421,7 +516,7 @@ export default function Swap({ poolAddress }: SwapProps) {
   }, [
     baseFeeBps,
     kinkFeeBps,
-    inputAmount,
+    debouncedInputAmount,
     inputToken,
     inputTokenDecimals,
     expectedOutput,
@@ -645,13 +740,77 @@ export default function Swap({ poolAddress }: SwapProps) {
         </div>
         <div className="rounded-xl border border-border/50 bg-muted/40 px-4 py-2">
           <span className="text-muted-foreground text-sm mr-2">Pool:</span>
-          <code className="text-[#00ffff] text-sm font-mono">
-            {poolAddress.slice(0, 6)}...{poolAddress.slice(-4)}
-          </code>
+          <AddressDisplay
+            address={poolAddress}
+            className="text-[#00ffff] text-sm"
+          />
         </div>
       </div>
 
+      {/* Token Info Row */}
+      {token0Address && token1Address && (
+        <div className="mb-6 rounded-xl border border-border/50 bg-muted/40 p-4">
+          <div className="flex items-center justify-center gap-4 md:gap-6 flex-wrap">
+            {/* Token 0 Info Column */}
+            <div className="flex flex-col items-center gap-1.5 min-w-[100px]">
+              <span className="text-sm font-semibold text-foreground">{token0Meta.symbol || 'Token 0'}</span>
+              <div className="rounded-md bg-muted/50 px-2 py-1">
+                <AddressDisplay
+                  address={token0Address}
+                  className="text-xs text-muted-foreground"
+                  startChars={6}
+                  endChars={4}
+                />
+              </div>
+            </div>
 
+            {/* Token 0 Logo */}
+            <div className="flex items-center">
+              <TokenLogo address={token0Address} size={40} />
+            </div>
+
+            {/* Swap Price: 1 Token 0 -> Token 1 */}
+            <div className="flex flex-col items-center gap-1.5 min-w-[120px] rounded-xl border border-border/40 bg-card/40 px-3 py-2">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">1 {token0Meta.symbol || 'Token 0'}</span>
+              <span className="text-base font-semibold text-[#00ffff]">
+                {price0to1
+                  ? (Number(price0to1) / 10 ** token1Meta.decimals).toFixed(6)
+                  : '—'}
+              </span>
+              <span className="text-xs text-muted-foreground">{token1Meta.symbol || 'Token 1'}</span>
+            </div>
+
+            {/* Swap Price: 1 Token 1 -> Token 0 */}
+            <div className="flex flex-col items-center gap-1.5 min-w-[120px] rounded-xl border border-border/40 bg-card/40 px-3 py-2">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">1 {token1Meta.symbol || 'Token 1'}</span>
+              <span className="text-base font-semibold text-[#ff00ff]">
+                {price1to0
+                  ? (Number(price1to0) / 10 ** token0Meta.decimals).toFixed(6)
+                  : '—'}
+              </span>
+              <span className="text-xs text-muted-foreground">{token0Meta.symbol || 'Token 0'}</span>
+            </div>
+
+            {/* Token 1 Logo */}
+            <div className="flex items-center">
+              <TokenLogo address={token1Address} size={40} />
+            </div>
+
+            {/* Token 1 Info Column */}
+            <div className="flex flex-col items-center gap-1.5 min-w-[100px]">
+              <span className="text-sm font-semibold text-foreground">{token1Meta.symbol || 'Token 1'}</span>
+              <div className="rounded-md bg-muted/50 px-2 py-1">
+                <AddressDisplay
+                  address={token1Address}
+                  className="text-xs text-muted-foreground"
+                  startChars={6}
+                  endChars={4}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Kink Warning */}
       {crossesKink && (

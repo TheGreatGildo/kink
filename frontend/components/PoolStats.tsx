@@ -47,8 +47,12 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
 
   const formatAmplification = (value?: bigint) =>
     typeof value === 'bigint' ? Number(value).toLocaleString() : '—';
-  const formatSoftPeg = (value?: bigint) =>
-    value && value > 0n ? (Number(value) / 1e18).toFixed(4) : '—';
+  const formatSoftPeg = (value?: bigint) => {
+    if (!value || value === 0n) return '—';
+    const normalized = Number(value) / 1e18;
+    // Values >= 100 indicate softPeg is not set (disabled)
+    return normalized >= 100 ? '—' : normalized.toFixed(4);
+  };
   const formatFee = (value?: bigint) =>
     typeof value === 'bigint' ? `${(Number(value) / 100).toFixed(2)}%` : '—';
 
@@ -59,9 +63,9 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
       hint: token0Meta.symbol ? `${token0Meta.symbol} heavy regime` : undefined,
     },
     {
-      label: 'Amplification (Token 1)',
-      value: formatAmplification(poolData.A1),
-      hint: token1Meta.symbol ? `${token1Meta.symbol} heavy regime` : undefined,
+      label: 'Base Fee',
+      value: formatFee(poolData.baseFee),
+      hint: 'applies above soft peg',
     },
     {
       label: 'Soft Peg (Token 0)',
@@ -69,20 +73,22 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
       hint: token0Meta.symbol,
     },
     {
-      label: 'Soft Peg (Token 1)',
-      value: formatSoftPeg(poolData.softPeg1),
-      hint: token1Meta.symbol,
-    },
-    {
-      label: 'Base Fee',
-      value: formatFee(poolData.baseFee),
-      hint: 'applies above soft peg',
+      label: 'Amplification (Token 1)',
+      value: formatAmplification(poolData.A1),
+      hint: token1Meta.symbol ? `${token1Meta.symbol} heavy regime` : undefined,
     },
     {
       label: 'Kink Fee',
       value: formatFee(poolData.kinkingFee),
       hint: 'applies below soft peg',
     },
+    {
+      label: 'Soft Peg (Token 1)',
+      value: formatSoftPeg(poolData.softPeg1),
+      hint: token1Meta.symbol,
+    },
+
+
   ];
 
   return (

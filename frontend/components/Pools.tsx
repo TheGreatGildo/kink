@@ -6,6 +6,9 @@ import { usePools } from '../hooks/usePools';
 import { PoolCard } from './PoolCard';
 import { PoolsIcon } from './Icons';
 
+// Pool address to hide from UI (erroneously created)
+const HIDDEN_POOL_ADDRESS = '0x2d66a2ed5aeaf4f6103a4f1fc41212bb56b0901f';
+
 export default function Pools() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -13,6 +16,11 @@ export default function Pools() {
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
 
   const returnTo = searchParams.get('returnTo');
+
+  // Filter out the hidden pool
+  const visiblePools = pools.filter(
+    (pool) => pool.poolAddress.toLowerCase() !== HIDDEN_POOL_ADDRESS.toLowerCase()
+  );
 
   return (
     <div className="w-full glass-card p-6 md:p-12 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -27,7 +35,7 @@ export default function Pools() {
           <div className="mb-6 h-20 w-20 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
           <p className="text-lg text-muted-foreground">Loading pools...</p>
         </div>
-      ) : pools.length === 0 ? (
+      ) : visiblePools.length === 0 ? (
         <div className="py-16 text-center">
           <div className="mb-6 flex justify-center">
             <PoolsIcon className="w-20 h-20 text-muted-foreground/50" />
@@ -45,7 +53,7 @@ export default function Pools() {
         </div>
       ) : (
         <div className="grid gap-6">
-          {pools.map((pool) => (
+          {visiblePools.map((pool) => (
             <PoolCard
               key={pool.poolAddress}
               pool={pool}

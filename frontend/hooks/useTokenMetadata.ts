@@ -51,12 +51,16 @@ export function useTokenMetadata(tokenAddress: string | undefined) {
     normalizedAddress && normalizedAddress.startsWith('0x') && normalizedAddress.length === 42
   );
 
+  // Use individual calls with extended caching to reduce RPC calls
+  // Token metadata rarely changes, so we can cache for longer
   const { data: onChainName } = useReadContract({
     address: (isValidAddress ? normalizedAddress : undefined) as `0x${string}` | undefined,
     abi: ERC20_ABI,
     functionName: 'name',
     query: {
       enabled: isValidAddress && !libraryToken,
+      staleTime: 300_000, // 5 minutes - token metadata rarely changes
+      gcTime: 600_000, // 10 minutes cache
     },
   });
 
@@ -66,6 +70,8 @@ export function useTokenMetadata(tokenAddress: string | undefined) {
     functionName: 'symbol',
     query: {
       enabled: isValidAddress && !libraryToken,
+      staleTime: 300_000, // 5 minutes
+      gcTime: 600_000, // 10 minutes
     },
   });
 
@@ -75,6 +81,8 @@ export function useTokenMetadata(tokenAddress: string | undefined) {
     functionName: 'decimals',
     query: {
       enabled: isValidAddress && !libraryToken,
+      staleTime: 300_000, // 5 minutes
+      gcTime: 600_000, // 10 minutes
     },
   });
 

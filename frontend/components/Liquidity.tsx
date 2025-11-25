@@ -13,6 +13,7 @@ import { DEPLOYED_POOL } from '../config/chains';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils/cn';
 import { LiquidityIcon } from './Icons';
+import { AddressDisplay } from './AddressDisplay';
 
 const POOL_ABI = [
   {
@@ -484,9 +485,10 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
         </div>
         <div className="rounded-xl border border-border/50 bg-muted/40 px-4 py-2">
           <span className="text-muted-foreground text-sm mr-2">Pool:</span>
-          <code className="text-[#00ffff] text-sm font-mono">
-            {poolAddress.slice(0, 6)}...{poolAddress.slice(-4)}
-          </code>
+          <AddressDisplay
+            address={poolAddress}
+            className="text-[#00ffff] text-sm"
+          />
         </div>
       </div>
 
@@ -638,11 +640,11 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
                 {simulateError.message || 'Transaction simulation failed. Check console for details.'}
               </div>
               <div className="text-xs text-red-400/70">
-                <div>Pool Address: {poolAddress}</div>
+                <div>Pool Address: <AddressDisplay address={poolAddress} className="text-red-400/70" showFull /></div>
                 <div>Pool Total Supply: {poolData.totalSupply !== undefined ? poolData.totalSupply.toString() : '❌ Cannot read (contract may not exist or be initialized)'}</div>
                 <div>Pool Reserves: {poolData.reserves ? `${poolData.reserves.reserve0.toString()}, ${poolData.reserves.reserve1.toString()}` : 'Cannot read'}</div>
-                <div>Token0 Address: {token0Address || 'Not loaded'}</div>
-                <div>Token1 Address: {token1Address || 'Not loaded'}</div>
+                <div>Token0 Address: {token0Address ? <AddressDisplay address={token0Address} className="text-red-400/70" showFull /> : 'Not loaded'}</div>
+                <div>Token1 Address: {token1Address ? <AddressDisplay address={token1Address} className="text-red-400/70" showFull /> : 'Not loaded'}</div>
                     <div>Amounts: {depositAmounts ? `${depositAmounts[0].toString()}, ${depositAmounts[1].toString()}` : 'N/A'}</div>
                 <div>Min LP: {minLp ? minLp.toString() : 'N/A'}</div>
                 <div>Expected LP: {expectedLP ? expectedLP.toString() : 'Cannot calculate'}</div>
@@ -658,7 +660,7 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
                 {poolData.totalSupply === undefined && (
                   <div className="mt-2 text-red-400">
                     ❌ CRITICAL: Cannot read pool state. The contract may not exist at this address or may not be initialized.
-                    Please verify the pool address is correct: {poolAddress}
+                    Please verify the pool address is correct: <AddressDisplay address={poolAddress} className="text-red-400" showFull />
                   </div>
                 )}
                 <div className="mt-2 text-yellow-400">

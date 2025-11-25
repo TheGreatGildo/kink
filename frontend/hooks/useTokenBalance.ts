@@ -33,6 +33,8 @@ export function useTokenBalance(tokenAddress: string | undefined) {
     args: address ? [address] : undefined,
     query: {
       enabled: isValidAddress && Boolean(address),
+      staleTime: 10_000, // 10 seconds - balances change on transactions
+      gcTime: 60_000, // 1 minute cache
     },
   });
 

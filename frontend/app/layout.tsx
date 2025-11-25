@@ -16,7 +16,17 @@ import './globals.css';
 import './milady.css';
 import { Suspense } from 'react';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000, // 30 seconds - data is fresh for 30s
+      gcTime: 300_000, // 5 minutes - cache for 5 minutes
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnMount: false, // Don't refetch on mount if data is fresh
+      retry: 1, // Only retry once on failure
+    },
+  },
+});
 
 export default function RootLayout({
   children,

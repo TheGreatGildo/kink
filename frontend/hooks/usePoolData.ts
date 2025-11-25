@@ -48,8 +48,8 @@ export function usePoolData(poolAddress: string | undefined) {
   const { data, refetch } = useQuery<MulticallResult | null>({
     queryKey: ['pool-data', normalizedAddress],
     enabled: Boolean(publicClient && normalizedAddress),
-    staleTime: 15_000,
-    gcTime: 60_000,
+    staleTime: 30_000, // Increased from 15s to 30s to reduce RPC calls
+    gcTime: 300_000, // Increased from 60s to 5 minutes
     refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!publicClient || !normalizedAddress) return null;
