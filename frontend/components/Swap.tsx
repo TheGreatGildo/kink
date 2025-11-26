@@ -95,19 +95,6 @@ export default function Swap({ poolAddress }: SwapProps) {
     ? String(poolData.token1).toLowerCase()
     : (poolAddress === DEPLOYED_POOL.address ? fallbackToken1 : undefined);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Swap - Pool Data:', {
-      poolAddress,
-      poolDataToken0: poolData.token0,
-      poolDataToken1: poolData.token1,
-      token0Address,
-      token1Address,
-      fallbackToken0,
-      fallbackToken1,
-      usingFallback: !poolData.token0 || !poolData.token1,
-    });
-  }, [poolAddress, poolData.token0, poolData.token1, token0Address, token1Address, fallbackToken0, fallbackToken1]);
 
   // Get token metadata for both tokens
   const token0Meta = useTokenMetadata(token0Address);
@@ -131,7 +118,8 @@ export default function Swap({ poolAddress }: SwapProps) {
   const outputTokenBalance = useTokenBalance(outputTokenAddress);
 
   // Check approval for swap (Router needs approval to transfer tokens)
-  const inputTokenApproval = useTokenApproval(inputTokenAddress, ROUTER_ADDRESS, inputAmount);
+  // Use debounced amount to avoid re-checking allowance on every keystroke
+  const inputTokenApproval = useTokenApproval(inputTokenAddress, ROUTER_ADDRESS, debouncedInputAmount);
 
   // Use actual token decimals instead of hardcoded 18
   const inputTokenDecimals = inputToken === 0 ? token0Meta.decimals : token1Meta.decimals;
@@ -151,8 +139,9 @@ export default function Swap({ poolAddress }: SwapProps) {
     ],
     query: {
       enabled: !!debouncedInputAmount && !!poolAddress && !!ROUTER_ADDRESS && amountIn > 0,
-      staleTime: 5_000, // 5 seconds - quotes can change frequently but we debounce input
-      gcTime: 30_000, // 30 seconds cache
+      staleTime: 10_000, // 10 seconds - quotes can change but we already debounce input
+      gcTime: 60_000, // 1 minute cache
+      refetchOnWindowFocus: false,
     }
   });
 
@@ -170,8 +159,9 @@ export default function Swap({ poolAddress }: SwapProps) {
     ],
     query: {
       enabled: !!poolAddress && !!ROUTER_ADDRESS && inputTokenDecimals > 0,
-      staleTime: 30_000, // 30 seconds - spot price doesn't need frequent updates
-      gcTime: 120_000, // 2 minutes cache
+      staleTime: 60_000, // 1 minute - spot price doesn't need frequent updates
+      gcTime: 180_000, // 3 minutes cache
+      refetchOnWindowFocus: false,
     }
   });
 
@@ -193,8 +183,9 @@ export default function Swap({ poolAddress }: SwapProps) {
     ],
     query: {
       enabled: !!poolAddress && !!ROUTER_ADDRESS && token0Meta.decimals > 0 && token1Meta.decimals > 0,
-      staleTime: 30_000, // 30 seconds
-      gcTime: 120_000, // 2 minutes cache
+      staleTime: 60_000, // 1 minute - display prices don't need frequent updates
+      gcTime: 180_000, // 3 minutes cache
+      refetchOnWindowFocus: false,
     }
   });
 
@@ -212,8 +203,9 @@ export default function Swap({ poolAddress }: SwapProps) {
     ],
     query: {
       enabled: !!poolAddress && !!ROUTER_ADDRESS && token0Meta.decimals > 0 && token1Meta.decimals > 0,
-      staleTime: 30_000, // 30 seconds
-      gcTime: 120_000, // 2 minutes cache
+      staleTime: 60_000, // 1 minute
+      gcTime: 180_000, // 3 minutes cache
+      refetchOnWindowFocus: false,
     }
   });
 
@@ -255,34 +247,34 @@ export default function Swap({ poolAddress }: SwapProps) {
 
         if (routerOutput === null || routerOutput === BigInt(0)) {
           console.warn('Router returned zero or null output:', {
-            inputAmount,
-          amount: parsedAmount.toString(),
-          amountFormatted: (Number(parsedAmount) / 10 ** inputTokenDecimals).toFixed(6),
+            debouncedInputAmount,
+            amount: parsedAmount.toString(),
+            amountFormatted: (Number(parsedAmount) / 10 ** inputTokenDecimals).toFixed(6),
             routerOutput: routerOutput?.toString(),
             inputToken,
             outputToken,
             poolAddress,
-          reserve0Formatted: (Number(reserve0) / 10 ** token0Meta.decimals).toFixed(6),
-          reserve1Formatted: (Number(reserve1) / 10 ** token1Meta.decimals).toFixed(6),
+            reserve0Formatted: (Number(reserve0) / 10 ** token0Meta.decimals).toFixed(6),
+            reserve1Formatted: (Number(reserve1) / 10 ** token1Meta.decimals).toFixed(6),
           });
         } else {
           const outputFormatted = Number(routerOutput) / 10 ** outputTokenDecimals;
-        const inputFormatted = Number(parsedAmount) / 10 ** inputTokenDecimals;
+          const inputFormatted = Number(parsedAmount) / 10 ** inputTokenDecimals;
           const ratio = outputFormatted / inputFormatted;
 
           if (routerOutput < BigInt(1000) || ratio < 0.01) {
             console.warn('Router returned very small output:', {
-              inputAmount,
+              debouncedInputAmount,
               inputFormatted: inputFormatted.toFixed(6),
-            amount: parsedAmount.toString(),
+              amount: parsedAmount.toString(),
               routerOutput: routerOutput.toString(),
               outputFormatted: outputFormatted.toFixed(6),
               ratio: ratio.toFixed(6),
               inputToken,
               outputToken,
               poolAddress,
-            reserve0Formatted: (Number(reserve0) / 10 ** token0Meta.decimals).toFixed(6),
-            reserve1Formatted: (Number(reserve1) / 10 ** token1Meta.decimals).toFixed(6),
+              reserve0Formatted: (Number(reserve0) / 10 ** token0Meta.decimals).toFixed(6),
+              reserve1Formatted: (Number(reserve1) / 10 ** token1Meta.decimals).toFixed(6),
               note: 'Very small output may be due to low pool liquidity or calculation rounding',
             });
           }
@@ -553,17 +545,6 @@ export default function Swap({ poolAddress }: SwapProps) {
     return `${baseFeeFormatted}%`;
   }, [feeBreakdown, baseFeeFormatted, kinkingFeeFormatted]);
 
-  // Debug fees
-  useEffect(() => {
-      console.log('Fee Debug:', {
-          baseFee: poolData.baseFee?.toString(),
-          kinkingFee: poolData.kinkingFee?.toString(),
-          baseFeeFormatted,
-          kinkingFeeFormatted,
-          swapType,
-          currentFeeDisplay
-      });
-  }, [poolData.baseFee, poolData.kinkingFee, baseFeeFormatted, kinkingFeeFormatted, swapType, currentFeeDisplay]);
 
   // Calculate Price Impact
   const priceImpact = useMemo(() => {
@@ -1007,7 +988,7 @@ export default function Swap({ poolAddress }: SwapProps) {
           </div>
           {feeBreakdown.softPegTriggered && (
             <p className="text-xs text-yellow-400">
-              Soft peg triggered: remaining portion will incur the kink fee.
+              Soft peg triggered: remaining portion will incur the depeg fee.
             </p>
           )}
           <div className="flex justify-between items-center">
@@ -1110,7 +1091,21 @@ export default function Swap({ poolAddress }: SwapProps) {
           </div>
         )}
       </div>
-      <PoolStats poolAddress={poolAddress} />
+      <PoolStats
+        poolAddress={poolAddress}
+        token0Address={token0Address}
+        token1Address={token1Address}
+        poolData={{
+          reserves: poolData.reserves,
+          totalSupply: poolData.totalSupply,
+          A0: poolData.A0,
+          A1: poolData.A1,
+          baseFee: poolData.baseFee,
+          kinkingFee: poolData.kinkingFee,
+          softPeg0: poolData.softPeg0,
+          softPeg1: poolData.softPeg1,
+        }}
+      />
     </div>
   );
 }

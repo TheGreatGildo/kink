@@ -94,7 +94,7 @@ export function PoolCard({ pool, isActive, onSelect }: PoolCardProps) {
 
           </div>
           <p className="text-xs text-muted-foreground">
-              Dynamic kinked fees with configurable soft pegs.
+              Dynamic depeg fees with configurable soft pegs.
             </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -133,11 +133,11 @@ export function PoolCard({ pool, isActive, onSelect }: PoolCardProps) {
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
             <MetricPill label="Base Fee" value={`${Number(pool.baseFee) / 100}%`} />
-            <MetricPill label="Kink Fee" value={`${Number(pool.kinkingFee) / 100}%`} />
-            <MetricPill label="A0" value={formatAmplification(amplificationA0)} />
-            <MetricPill label="A1" value={formatAmplification(amplificationA1)} />
-            <MetricPill label="Soft Peg 0" value={formatSoftPeg(softPeg0)} />
-            <MetricPill label="Soft Peg 1" value={formatSoftPeg(softPeg1)} />
+            <MetricPill label="Depeg Fee" value={`${Number(pool.kinkingFee) / 100}%`} />
+            <MetricPill label={`${token0Meta.symbol} LQ.`} value={formatAmplification(amplificationA0)} />
+            <MetricPill label={`${token1Meta.symbol} LQ.`} value={formatAmplification(amplificationA1)} />
+            <MetricPill label={`${token0Meta.symbol} Soft Peg`} value={formatSoftPeg(softPeg0)} />
+            <MetricPill label={`${token1Meta.symbol} Soft Peg`} value={formatSoftPeg(softPeg1)} />
           </div>
         </div>
       </div>

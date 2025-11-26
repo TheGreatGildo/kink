@@ -6,6 +6,7 @@ import { FACTORY_ADDRESS, CEFI_TOKEN_ADDRESS, DEFI_TOKEN_ADDRESS } from "../conf
 import { Button } from "./ui/button";
 import { CreateIcon } from "./Icons";
 import { TokenSelector } from "./TokenSelector";
+import { useTokenMetadata } from "../hooks/useTokenMetadata";
 import {
   Chart as ChartJS,
   LinearScale,
@@ -87,15 +88,17 @@ const calculatePrice = (x: number, A: number, D: number, dx = 1) => {
 export default function CreatePool() {
   const [tokenA, setTokenA] = useState(CEFI_TOKEN_ADDRESS);
   const [tokenB, setTokenB] = useState(DEFI_TOKEN_ADDRESS);
-  const [A0, setA0] = useState(1000);
-  const [A1, setA1] = useState(69);
-  const [baseFee, setBaseFee] = useState(5);
-  const [kinkingFee, setKinkingFee] = useState(25);
+  const [A0, setA0] = useState(500);
+  const [A1, setA1] = useState(100);
+  const [baseFee, setBaseFee] = useState(5); // 0.05%
+  const [kinkingFee, setKinkingFee] = useState(25); // 0.25%
 
-  const [enableSoftPegA, setEnableSoftPegA] = useState(false);
-  const [enableSoftPegB, setEnableSoftPegB] = useState(true); // Default enabled for Token B (DeFi) in CEFI-DEFI mode
-  const [softPegA, setSoftPegA] = useState(0.98);
-  const [softPegB, setSoftPegB] = useState(0.98);
+  const [softPegA, setSoftPegA] = useState(0.998);
+  const [softPegB, setSoftPegB] = useState(0.985);
+
+  // Get token metadata for display
+  const tokenAMeta = useTokenMetadata(tokenA);
+  const tokenBMeta = useTokenMetadata(tokenB);
 
   const { writeContract, data: hash, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
@@ -108,12 +111,6 @@ export default function CreatePool() {
       return;
     }
 
-    // If soft peg is DISABLED, we set it to a very high number (e.g. 100.0)
-    // This ensures price < peg is ALWAYS true, so Kink Fee is ALWAYS applied when diverging.
-    // This matches the "Standard Kink" behavior.
-    const finalPegA = enableSoftPegA ? softPegA : 100;
-    const finalPegB = enableSoftPegB ? softPegB : 100;
-
     writeContract({
       address: FACTORY_ADDRESS as `0x${string}`,
       abi: FACTORY_ABI,
@@ -125,8 +122,8 @@ export default function CreatePool() {
         BigInt(A1),
         BigInt(baseFee),
         BigInt(kinkingFee),
-        BigInt(Math.floor(finalPegA * 1e18)),
-        BigInt(Math.floor(finalPegB * 1e18)),
+        BigInt(Math.floor(softPegA * 1e18)),
+        BigInt(Math.floor(softPegB * 1e18)),
       ],
     });
   };
@@ -134,46 +131,81 @@ export default function CreatePool() {
   // Fixed Liquidity D for preview visualization
   const D = 2000;
 
-  const { points, equilibriumPoints, priceA0, priceA1 } = useMemo(() => {
+  // Soft peg values for visualization (always enabled)
+  const effectiveSoftPegA = softPegA;
+  const effectiveSoftPegB = softPegB;
+
+  const { pointsKinkLeft, pointsBaseFee, pointsKinkRight, equilibriumPoints } = useMemo(() => {
     const mid = D / 2;
-    const newPoints: { x: number; y: number }[] = [];
+    const allPoints: { x: number; y: number; priceA: number; priceB: number }[] = [];
     const numSteps = 300;
 
-    // Part 1: Left of equilibrium (x < mid, so y > x, use A1)
-    // We need to ensure points are sorted by x for Chart.js to draw lines correctly
-
-    // Generate Part 1 points (x from 0 to mid)
+    // Generate all curve points with their prices
+    // Part 1: Left of equilibrium (x < mid, use A1)
     for (let i = 0; i <= numSteps / 2; i++) {
       const t = i / (numSteps / 2);
       let x = t * mid;
-      if (x < 0.01) x = 0.01; // Avoid 0
+      if (x < 0.01) x = 0.01;
 
       const y = get_y_D(A1, 1, [x, 0], D);
-      newPoints.push({ x, y });
+      const priceA = calculatePrice(x, A1, D); // Price of A in terms of B (dy/dx)
+      const priceB = priceA > 0 ? 1 / priceA : 0; // Price of B in terms of A
+      allPoints.push({ x, y, priceA, priceB });
     }
 
-    // Part 2: Right of equilibrium (x > mid, so x > y, use A0)
-    let x = mid;
-    // Avoid duplicate point at mid if already added
-    if (newPoints.length > 0 && Math.abs(newPoints[newPoints.length - 1].x - x) < 0.001) {
-        x += D / 100;
-    }
-
-    let y = get_y_D(A0, 1, [x, 0], D);
+    // Part 2: Right of equilibrium (x > mid, use A0)
+    let x = mid + D / 100;
     let step = D / 100;
     const maxSteps = 500;
     let count = 0;
 
-    // Continue generating points
-    while (y > 1 && count < maxSteps) {
+    while (count < maxSteps) {
       count++;
-      // Calculate y first before pushing to ensure valid pair
-      y = get_y_D(A0, 1, [x, 0], D);
-      newPoints.push({ x, y });
+      const y = get_y_D(A0, 1, [x, 0], D);
+      if (y <= 1) break;
+
+      const priceA = calculatePrice(x, A0, D);
+      const priceB = priceA > 0 ? 1 / priceA : 0;
+      allPoints.push({ x, y, priceA, priceB });
 
       x += step;
       if (count > 50) step = D / 50;
       if (count > 100) step = D / 20;
+    }
+
+    // Split points into three segments based on soft peg prices:
+    // - Left kink zone: price of B < softPegB (B is cheap, far left)
+    // - Base fee zone: both prices >= soft pegs (middle safe zone)
+    // - Right kink zone: price of A < softPegA (A is cheap, far right)
+    const kinkLeftPoints: { x: number; y: number }[] = [];
+    const baseFeePoints: { x: number; y: number }[] = [];
+    const kinkRightPoints: { x: number; y: number }[] = [];
+
+    for (const pt of allPoints) {
+      const inKinkZoneA = effectiveSoftPegA > 0 && pt.priceA < effectiveSoftPegA;
+      const inKinkZoneB = effectiveSoftPegB > 0 && pt.priceB < effectiveSoftPegB;
+
+      if (inKinkZoneB) {
+        // Far left - B is cheap (below soft peg)
+        kinkLeftPoints.push({ x: pt.x, y: pt.y });
+      } else if (inKinkZoneA) {
+        // Far right - A is cheap (below soft peg)
+        kinkRightPoints.push({ x: pt.x, y: pt.y });
+      } else {
+        // Middle - both prices are above soft pegs
+        baseFeePoints.push({ x: pt.x, y: pt.y });
+      }
+    }
+
+    // Add overlap points for continuous line segments
+    // Find transition points and add them to adjacent segments
+    if (kinkLeftPoints.length > 0 && baseFeePoints.length > 0) {
+      const lastKinkLeft = kinkLeftPoints[kinkLeftPoints.length - 1];
+      baseFeePoints.unshift({ ...lastKinkLeft });
+    }
+    if (baseFeePoints.length > 0 && kinkRightPoints.length > 0) {
+      const lastBaseFee = baseFeePoints[baseFeePoints.length - 1];
+      kinkRightPoints.unshift({ ...lastBaseFee });
     }
 
     const newEquilibriumPoints = [
@@ -181,20 +213,13 @@ export default function CreatePool() {
       { x: Math.max(mid * 2.5, D), y: Math.max(mid * 2.5, D) },
     ];
 
-    // Prices
-    const x_a1 = D * 0.25;
-    const p_a1 = calculatePrice(x_a1, A1, D);
-
-    const x_a0 = D * 0.75;
-    const p_a0 = calculatePrice(x_a0, A0, D);
-
-      return {
-      points: newPoints,
+    return {
+      pointsKinkLeft: kinkLeftPoints,
+      pointsBaseFee: baseFeePoints,
+      pointsKinkRight: kinkRightPoints,
       equilibriumPoints: newEquilibriumPoints,
-      priceA1: p_a1,
-      priceA0: p_a0,
     };
-  }, [A0, A1, D]);
+  }, [A0, A1, D, effectiveSoftPegA, effectiveSoftPegB]);
 
   const chartOptions: ChartOptions<"scatter"> = {
     responsive: true,
@@ -279,17 +304,42 @@ export default function CreatePool() {
 
   const chartData = {
     datasets: [
-      {
-        label: "Invariant Curve",
-        data: points,
+      // Kink fee zone - left (Token B below soft peg)
+      ...(pointsKinkLeft.length > 0 ? [{
+        label: "Depeg Fee Zone (B < Peg)",
+        data: pointsKinkLeft,
+        borderColor: "rgb(0, 255, 0)", // Green #00ff00
+        backgroundColor: "rgba(0, 255, 0, 0.1)",
+        showLine: true,
+        pointRadius: 1,
+        borderWidth: 3,
+        tension: 0.2,
+        spanGaps: true,
+      }] : []),
+      // Base fee zone - middle (both prices above soft pegs)
+      ...(pointsBaseFee.length > 0 ? [{
+        label: "Base Fee Zone",
+        data: pointsBaseFee,
         borderColor: "rgb(0, 255, 255)", // Cyan #00ffff
         backgroundColor: "rgba(0, 255, 255, 0.1)",
         showLine: true,
-        pointRadius: 1, // Increase from 0 to 1 to make it visible
+        pointRadius: 1,
         borderWidth: 3,
         tension: 0.2,
-        spanGaps: true, // Ensure lines are connected if there are any gaps
-      },
+        spanGaps: true,
+      }] : []),
+      // Kink fee zone - right (Token A below soft peg)
+      ...(pointsKinkRight.length > 0 ? [{
+        label: "Depeg Fee Zone (A < Peg)",
+        data: pointsKinkRight,
+        borderColor: "rgb(0, 255, 0)", // Green #00ff00
+        backgroundColor: "rgba(0, 255, 0, 0.1)",
+        showLine: true,
+        pointRadius: 1,
+        borderWidth: 3,
+        tension: 0.2,
+        spanGaps: true,
+      }] : []),
       {
         label: "Equilibrium (x=y)",
         data: equilibriumPoints,
@@ -315,26 +365,9 @@ export default function CreatePool() {
       <div className="flex flex-col gap-4">
         {/* Full width graph */}
         <div className="rounded-xl border border-border/50 bg-muted/40 p-6 w-full overflow-hidden relative">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-semibold text-[#00ffff]">
+          <h3 className="text-xl font-semibold text-[#00ffff] mb-4">
             Kink Curve Preview
           </h3>
-            <div className="flex gap-4 text-sm">
-              <div className="flex flex-col items-end">
-                <span className="text-muted-foreground">Price (A1 Zone)</span>
-                <span className="font-mono font-bold text-[#ff00ff]">
-                  {priceA1.toFixed(4)}
-                </span>
-                  </div>
-              <div className="flex flex-col items-end">
-                <span className="text-muted-foreground">Price (A0 Zone)</span>
-                <span className="font-mono font-bold text-[#00ffff]">
-                  {priceA0.toFixed(4)}
-                </span>
-                  </div>
-                  </div>
-                </div>
-
           <div className="relative w-full max-w-[600px] mx-auto aspect-square">
             <Scatter data={chartData} options={chartOptions} />
           </div>
@@ -347,15 +380,15 @@ export default function CreatePool() {
               <div className="flex items-start gap-3">
                 <span className="text-[#00ffff] text-xl">●</span>
                 <p className="text-foreground">
-                  <span className="font-semibold text-[#00ffff]">A0</span>{" "}
-                  controls the curve when Token A &gt; Token B
+                  <span className="font-semibold text-[#00ffff]">{tokenAMeta.symbol || 'Token A'}</span>{" "}
+                  concentration controls curve when {tokenAMeta.symbol || 'A'} &gt; {tokenBMeta.symbol || 'B'}
                 </p>
               </div>
               <div className="flex items-start gap-3">
                 <span className="text-[#ff00ff] text-xl">●</span>
                 <p className="text-foreground">
-                  <span className="font-semibold text-[#ff00ff]">A1</span>{" "}
-                  controls the curve when Token B &gt; Token A
+                  <span className="font-semibold text-[#ff00ff]">{tokenBMeta.symbol || 'Token B'}</span>{" "}
+                  concentration controls curve when {tokenBMeta.symbol || 'B'} &gt; {tokenAMeta.symbol || 'A'}
                 </p>
               </div>
               <div className="flex items-start gap-3">
@@ -374,13 +407,25 @@ export default function CreatePool() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-1">
                   <div className="h-full rounded-xl border border-border/60 bg-card/60 p-4">
-                    <div className="flex justify-between mb-2">
+                    <div className="flex justify-between mb-2 items-center">
                       <label className="text-sm font-semibold text-foreground">
                         Base Fee
                       </label>
-                      <span className="text-lg font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">
-                        {(baseFee / 100).toFixed(2)}%
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          value={(baseFee / 100).toFixed(2)}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) setBaseFee(Math.min(100, Math.max(0, Math.round(val * 100))));
+                          }}
+                          className="w-20 text-right text-lg font-bold bg-transparent border border-border/50 rounded px-2 py-0.5 text-[#00ffff] focus:outline-none focus:border-[#00ffff]"
+                        />
+                        <span className="text-lg font-bold text-[#00ffff]">%</span>
+                      </div>
                     </div>
                     <input
                       type="range"
@@ -397,13 +442,25 @@ export default function CreatePool() {
                 </div>
                 <div className="md:col-span-1">
                   <div className="h-full rounded-xl border border-border/60 bg-card/60 p-4">
-                    <div className="flex justify-between mb-2">
+                    <div className="flex justify-between mb-2 items-center">
                       <label className="text-sm font-semibold text-foreground">
-                        Kinking Fee
+                        Depeg Fee
                       </label>
-                      <span className="text-lg font-bold bg-linear-to-r from-[#00ffff] to-[#ff00ff] bg-clip-text text-transparent">
-                        {(kinkingFee / 100).toFixed(2)}%
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          value={(kinkingFee / 100).toFixed(2)}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) setKinkingFee(Math.min(100, Math.max(0, Math.round(val * 100))));
+                          }}
+                          className="w-20 text-right text-lg font-bold bg-transparent border border-border/50 rounded px-2 py-0.5 text-[#ff00ff] focus:outline-none focus:border-[#ff00ff]"
+                        />
+                        <span className="text-lg font-bold text-[#ff00ff]">%</span>
+                      </div>
                     </div>
                     <input
                       type="range"
@@ -437,24 +494,35 @@ export default function CreatePool() {
               <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
                 <div className="flex justify-between mb-3 items-center">
                   <label className="text-base font-semibold text-foreground">
-                    Amplification A0
+                    Liquidity Concentration Level
                   </label>
-                  <span className="text-2xl font-bold text-[#00ffff]">{A0}</span>
+                  <input
+                    type="number"
+                    min="2"
+                    max="10000"
+                    step="1"
+                    value={A0}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val)) setA0(Math.min(10000, Math.max(2, val)));
+                    }}
+                    className="w-24 text-right text-2xl font-bold bg-transparent border border-border/50 rounded px-2 py-0.5 text-[#00ffff] focus:outline-none focus:border-[#00ffff]"
+                  />
                 </div>
                 <input
                   type="range"
                   min="2"
                   max="1000"
-                  value={A0}
+                  value={Math.min(1000, A0)}
                   onChange={(e) => setA0(Number(e.target.value))}
                   className="w-full accent-[#00ffff]"
                 />
                 <div className="flex justify-between text-sm text-muted-foreground mt-2">
                   <span>2</span>
                   <span className="text-muted-foreground/70">
-                    More stable when A is heavy
+                    Higher = more stable
                   </span>
-                  <span>1000</span>
+                  <span>1000+</span>
                 </div>
               </div>
             </div>
@@ -472,24 +540,35 @@ export default function CreatePool() {
               <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
                 <div className="flex justify-between mb-3 items-center">
                   <label className="text-base font-semibold text-foreground">
-                    Amplification A1
+                    Liquidity Concentration Level
                   </label>
-                  <span className="text-2xl font-bold text-[#ff00ff]">{A1}</span>
+                  <input
+                    type="number"
+                    min="2"
+                    max="10000"
+                    step="1"
+                    value={A1}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val)) setA1(Math.min(10000, Math.max(2, val)));
+                    }}
+                    className="w-24 text-right text-2xl font-bold bg-transparent border border-border/50 rounded px-2 py-0.5 text-[#ff00ff] focus:outline-none focus:border-[#ff00ff]"
+                  />
                 </div>
                 <input
                   type="range"
                   min="2"
                   max="1000"
-                  value={A1}
+                  value={Math.min(1000, A1)}
                   onChange={(e) => setA1(Number(e.target.value))}
                   className="w-full accent-[#ff00ff]"
                 />
                 <div className="flex justify-between text-sm text-muted-foreground mt-2">
                   <span>2</span>
                   <span className="text-muted-foreground/70">
-                    More stable when B is heavy
+                    Higher = more stable
                   </span>
-                  <span>1000</span>
+                  <span>1000+</span>
                 </div>
               </div>
             </div>
@@ -499,81 +578,73 @@ export default function CreatePool() {
         {/* Soft Peg Configuration */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
             <div className="lg:col-span-1">
-                <div className={`rounded-xl border border-border/50 bg-muted/40 p-6 transition-opacity ${!enableSoftPegA ? 'opacity-70' : ''}`}>
+                <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
                     <div className="flex justify-between mb-3 items-center">
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={enableSoftPegA}
-                                onChange={(e) => setEnableSoftPegA(e.target.checked)}
-                                className="w-4 h-4 accent-[#00ffff] cursor-pointer"
-                            />
-                            <label className="text-base font-semibold text-foreground cursor-pointer" onClick={() => setEnableSoftPegA(!enableSoftPegA)}>
-                                Soft Peg (Token A)
-                            </label>
-                        </div>
-                        {enableSoftPegA && <span className="text-2xl font-bold text-[#00ffff]">{softPegA.toFixed(2)}</span>}
+                        <label className="text-base font-semibold text-foreground">
+                            Soft Peg (Token A)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="0.9999"
+                            step="0.0001"
+                            value={softPegA}
+                            onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val)) setSoftPegA(Math.min(0.9999, Math.max(0, val)));
+                            }}
+                            className="w-28 text-right text-2xl font-bold bg-transparent border border-border/50 rounded px-2 py-0.5 text-[#00ffff] focus:outline-none focus:border-[#00ffff]"
+                        />
                     </div>
-
-                    {enableSoftPegA ? (
-                        <>
-                            <input
-                                type="range"
-                                min="0"
-                                max="2"
-                                step="0.01"
-                                value={softPegA}
-                                onChange={(e) => setSoftPegA(Number(e.target.value))}
-                                className="w-full accent-[#00ffff]"
-                            />
-                            <div className="text-xs text-muted-foreground mt-2">
-                                Kink Fee applied ONLY when price &lt; {softPegA.toFixed(2)}
-                            </div>
-                        </>
-                    ) : (
-                        <div className="text-sm text-muted-foreground italic py-2">
-                            Standard Kink: Higher fee ALWAYS applied when selling Token A (Diverging)
-                        </div>
-                    )}
+                    <input
+                        type="range"
+                        min="0"
+                        max="0.9999"
+                        step="0.0001"
+                        value={Math.min(0.9999, softPegA)}
+                        onChange={(e) => setSoftPegA(Number(e.target.value))}
+                        className="w-full accent-[#00ffff]"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>0</span>
+                        <span>Depeg Fee applied when price &lt; {softPegA.toFixed(4)}</span>
+                        <span>0.9999</span>
+                    </div>
                 </div>
             </div>
             <div className="lg:col-span-1">
-                <div className={`rounded-xl border border-border/50 bg-muted/40 p-6 transition-opacity ${!enableSoftPegB ? 'opacity-70' : ''}`}>
+                <div className="rounded-xl border border-border/50 bg-muted/40 p-6">
                     <div className="flex justify-between mb-3 items-center">
-                         <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={enableSoftPegB}
-                                onChange={(e) => setEnableSoftPegB(e.target.checked)}
-                                className="w-4 h-4 accent-[#ff00ff] cursor-pointer"
-                            />
-                            <label className="text-base font-semibold text-foreground cursor-pointer" onClick={() => setEnableSoftPegB(!enableSoftPegB)}>
-                                Soft Peg (Token B)
-                            </label>
-                        </div>
-                        {enableSoftPegB && <span className="text-2xl font-bold text-[#ff00ff]">{softPegB.toFixed(2)}</span>}
+                        <label className="text-base font-semibold text-foreground">
+                            Soft Peg (Token B)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="0.9999"
+                            step="0.0001"
+                            value={softPegB}
+                            onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val)) setSoftPegB(Math.min(0.9999, Math.max(0, val)));
+                            }}
+                            className="w-28 text-right text-2xl font-bold bg-transparent border border-border/50 rounded px-2 py-0.5 text-[#ff00ff] focus:outline-none focus:border-[#ff00ff]"
+                        />
                     </div>
-
-                    {enableSoftPegB ? (
-                        <>
-                            <input
-                                type="range"
-                                min="0"
-                                max="2"
-                                step="0.01"
-                                value={softPegB}
-                                onChange={(e) => setSoftPegB(Number(e.target.value))}
-                                className="w-full accent-[#ff00ff]"
-                            />
-                            <div className="text-xs text-muted-foreground mt-2">
-                                 Kink Fee applied ONLY when price &lt; {softPegB.toFixed(2)}
-                            </div>
-                        </>
-                    ) : (
-                         <div className="text-sm text-muted-foreground italic py-2">
-                            Standard Kink: Higher fee ALWAYS applied when selling Token B (Diverging)
-                        </div>
-                    )}
+                    <input
+                        type="range"
+                        min="0"
+                        max="0.9999"
+                        step="0.0001"
+                        value={Math.min(0.9999, softPegB)}
+                        onChange={(e) => setSoftPegB(Number(e.target.value))}
+                        className="w-full accent-[#ff00ff]"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>0</span>
+                        <span>Depeg Fee applied when price &lt; {softPegB.toFixed(4)}</span>
+                        <span>0.9999</span>
+                    </div>
                 </div>
             </div>
         </div>
