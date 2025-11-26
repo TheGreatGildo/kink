@@ -19,6 +19,8 @@ const BASE_TOKENS: TokenOption[] = [
   { symbol: 'sUSD', name: 'Synthetix USD', address: '0x8c6f28f2F1A3C87F0f938b96d27520d9751ec8d9', type: 'defi' },
   { symbol: 'FRAX', name: 'Frax', address: '0x2E3D870790dC77A83DD1d18184Acc7439A53f475', type: 'defi' },
   { symbol: 'wUSDM', name: 'Wrapped USDM', address: '0x57F5E098CaD7A3D1Eaaa8C8E51c60F7259b974b7', type: 'cefi' },
+  { symbol: 'USDC', name: 'USD Coin', address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', type: 'cefi' },
+  { symbol: 'KUNGFU', name: 'Kungfu', address: '0x894ED1E34F8f4E6B3951383d72095650028F818e', type: 'defi' },
 ];
 
 // Deduplicate and ensure configured tokens are present
