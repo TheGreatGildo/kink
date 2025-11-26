@@ -6,8 +6,11 @@ import { usePools } from '../hooks/usePools';
 import { PoolCard } from './PoolCard';
 import { PoolsIcon } from './Icons';
 
-// Pool address to hide from UI (erroneously created)
-const HIDDEN_POOL_ADDRESS = '0x2d66a2ed5aeaf4f6103a4f1fc41212bb56b0901f';
+// Pool addresses to hide from UI (erroneously created)
+const HIDDEN_POOL_ADDRESSES = [
+  '0x2d66a2ed5aeaf4f6103a4f1fc41212bb56b0901f',
+  '0x00466e3b79c7f8c8d77fc3b44203f0dc0adcb4c2',
+];
 
 export default function Pools() {
   const router = useRouter();
@@ -17,9 +20,11 @@ export default function Pools() {
 
   const returnTo = searchParams.get('returnTo');
 
-  // Filter out the hidden pool
+  // Filter out hidden pools
   const visiblePools = pools.filter(
-    (pool) => pool.poolAddress.toLowerCase() !== HIDDEN_POOL_ADDRESS.toLowerCase()
+    (pool) => !HIDDEN_POOL_ADDRESSES.some(
+      (hidden) => pool.poolAddress.toLowerCase() === hidden.toLowerCase()
+    )
   );
 
   return (

@@ -1,8 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useReadContract } from 'wagmi';
-import { useAccount } from 'wagmi';
+import { useReadContract, useAccount } from 'wagmi';
 import { formatUnits } from 'viem';
 import { useTokenMetadata } from './useTokenMetadata';
 
@@ -33,8 +31,9 @@ export function useTokenBalance(tokenAddress: string | undefined) {
     args: address ? [address] : undefined,
     query: {
       enabled: isValidAddress && Boolean(address),
-      staleTime: 10_000, // 10 seconds - balances change on transactions
-      gcTime: 60_000, // 1 minute cache
+      staleTime: 30_000, // 30 seconds - balances change on transactions, refetch manually after swap
+      gcTime: 120_000, // 2 minutes cache
+      refetchOnWindowFocus: false,
     },
   });
 
@@ -44,13 +43,6 @@ export function useTokenBalance(tokenAddress: string | undefined) {
   const formattedBalance = balance && balance > 0n
     ? parseFloat(formatUnits(balance, tokenDecimals)).toFixed(6)
     : '0.00';
-
-  // Debug logging (only in development)
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development' && tokenAddress && !isValidAddress) {
-      console.warn('Invalid token address for balance query:', tokenAddress);
-    }
-  }, [tokenAddress, isValidAddress]);
 
   return {
     balance,

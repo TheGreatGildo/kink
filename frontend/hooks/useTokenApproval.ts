@@ -47,6 +47,9 @@ export function useTokenApproval(
     args: address && spenderAddress ? [address, spenderAddress as `0x${string}`] : undefined,
     query: {
       enabled: !!tokenAddress && !!spenderAddress && !!address,
+      staleTime: 30_000, // 30 seconds - allowance only changes on approval tx
+      gcTime: 120_000, // 2 minutes cache
+      refetchOnWindowFocus: false,
     },
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { usePublicClient } from 'wagmi';
 import type { Address } from 'viem';
 import { useQuery } from '@tanstack/react-query';
@@ -133,17 +133,6 @@ export function usePoolData(poolAddress: string | undefined) {
   const refetchAll = useCallback(async () => {
     await refetch();
   }, [refetch]);
-
-  useEffect(() => {
-    if (normalizedAddress) {
-      console.log('usePoolData - fetched pool snapshot', {
-        poolAddress: normalizedAddress,
-        hasReserves: Boolean(reserves),
-        token0: token0Address,
-        token1: token1Address,
-      });
-    }
-  }, [normalizedAddress, reserves, token0Address, token1Address]);
 
   return {
     reserves,

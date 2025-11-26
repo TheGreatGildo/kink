@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useReadContract } from 'wagmi';
 import { getTokenInfo, getTokenSymbol, getTokenName } from '../lib/tokens';
 
@@ -31,17 +30,6 @@ const ERC20_ABI = [
 export function useTokenMetadata(tokenAddress: string | undefined) {
   // Normalize address for consistent lookup
   const normalizedAddress = tokenAddress?.toLowerCase().trim();
-
-  // Debug logging
-  useEffect(() => {
-    if (normalizedAddress) {
-      console.log('useTokenMetadata:', {
-        tokenAddress,
-        normalizedAddress,
-        foundInLibrary: !!getTokenInfo(normalizedAddress),
-      });
-    }
-  }, [tokenAddress, normalizedAddress]);
 
   // Try to get from our library first
   const libraryToken = normalizedAddress ? getTokenInfo(normalizedAddress) : undefined;

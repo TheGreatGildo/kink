@@ -5,23 +5,41 @@ import { useTokenMetadata } from '../hooks/useTokenMetadata';
 import { DEPLOYED_POOL } from '../config/chains';
 import { formatUnits } from 'viem';
 
-interface PoolStatsProps {
-  poolAddress: string;
+interface PoolDataShape {
+  reserves?: { reserve0: bigint; reserve1: bigint } | null;
+  totalSupply?: bigint;
+  A0?: bigint;
+  A1?: bigint;
+  baseFee?: bigint;
+  kinkingFee?: bigint;
+  softPeg0?: bigint;
+  softPeg1?: bigint;
+  token0?: string;
+  token1?: string;
 }
 
-export function PoolStats({ poolAddress }: PoolStatsProps) {
-  const poolData = usePoolData(poolAddress);
+interface PoolStatsProps {
+  poolAddress: string;
+  token0Address?: string;
+  token1Address?: string;
+  poolData?: PoolDataShape;
+}
+
+export function PoolStats({ poolAddress, token0Address: propToken0, token1Address: propToken1, poolData: propPoolData }: PoolStatsProps) {
+  // Only fetch pool data if not provided via props (avoids duplicate calls)
+  const fetchedPoolData = usePoolData(propPoolData ? undefined : poolAddress);
+  const poolData = propPoolData || fetchedPoolData;
 
   // Fallback token addresses
   const fallbackToken0 = DEPLOYED_POOL.token0?.toLowerCase();
   const fallbackToken1 = DEPLOYED_POOL.token1?.toLowerCase();
 
-  const token0Address = poolData.token0
+  const token0Address = propToken0 || (poolData.token0
     ? String(poolData.token0).toLowerCase()
-    : (poolAddress === DEPLOYED_POOL.address ? fallbackToken0 : undefined);
-  const token1Address = poolData.token1
+    : (poolAddress === DEPLOYED_POOL.address ? fallbackToken0 : undefined));
+  const token1Address = propToken1 || (poolData.token1
     ? String(poolData.token1).toLowerCase()
-    : (poolAddress === DEPLOYED_POOL.address ? fallbackToken1 : undefined);
+    : (poolAddress === DEPLOYED_POOL.address ? fallbackToken1 : undefined));
 
   const token0Meta = useTokenMetadata(token0Address);
   const token1Meta = useTokenMetadata(token1Address);
@@ -58,9 +76,9 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
 
   const parameterTiles = [
     {
-      label: 'Amplification (Token 0)',
+      label: 'Liquidity Concentration',
       value: formatAmplification(poolData.A0),
-      hint: token0Meta.symbol ? `${token0Meta.symbol} heavy regime` : undefined,
+      hint: token0Meta.symbol || 'Token 0',
     },
     {
       label: 'Base Fee',
@@ -68,24 +86,24 @@ export function PoolStats({ poolAddress }: PoolStatsProps) {
       hint: 'applies above soft peg',
     },
     {
-      label: 'Soft Peg (Token 0)',
+      label: 'Soft Peg',
       value: formatSoftPeg(poolData.softPeg0),
-      hint: token0Meta.symbol,
+      hint: token0Meta.symbol || 'Token 0',
     },
     {
-      label: 'Amplification (Token 1)',
+      label: 'Liquidity Concentration',
       value: formatAmplification(poolData.A1),
-      hint: token1Meta.symbol ? `${token1Meta.symbol} heavy regime` : undefined,
+      hint: token1Meta.symbol || 'Token 1',
     },
     {
-      label: 'Kink Fee',
+      label: 'Depeg Fee',
       value: formatFee(poolData.kinkingFee),
       hint: 'applies below soft peg',
     },
     {
-      label: 'Soft Peg (Token 1)',
+      label: 'Soft Peg',
       value: formatSoftPeg(poolData.softPeg1),
-      hint: token1Meta.symbol,
+      hint: token1Meta.symbol || 'Token 1',
     },
 
 

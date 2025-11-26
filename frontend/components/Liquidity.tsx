@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useSimulateContract } from 'wagmi';
 import { parseUnits, formatUnits } from 'viem';
 import { usePoolData } from '../hooks/usePoolData';
@@ -59,12 +59,31 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
   const [action, setAction] = useState<'add' | 'remove'>('add');
   const [amount0, setAmount0] = useState('');
   const [amount1, setAmount1] = useState('');
+  const [debouncedAmount0, setDebouncedAmount0] = useState('');
+  const [debouncedAmount1, setDebouncedAmount1] = useState('');
   const [lpAmount, setLpAmount] = useState('');
   const slippage = 0.5; // Default 0.5% slippage
   const [flowQueue, setFlowQueue] = useState<FlowStep[]>([]);
   const [currentFlowStep, setCurrentFlowStep] = useState<FlowStep | null>(null);
   const [pendingDepositParams, setPendingDepositParams] = useState<{ amounts: [bigint, bigint]; minLp: bigint } | null>(null);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounce input amounts to reduce RPC calls
+  useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedAmount0(amount0);
+      setDebouncedAmount1(amount1);
+    }, 300);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [amount0, amount1]);
 
   // Fallback to DEPLOYED_POOL if pool data isn't loaded yet
   const fallbackToken0 = DEPLOYED_POOL.token0?.toLowerCase();
@@ -87,27 +106,12 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
   );
 
-  // Debug: Log token addresses when they change
-  useEffect(() => {
-    console.log('Liquidity - Pool Data:', {
-      poolAddress,
-      token0: poolData.token0,
-      token1: poolData.token1,
-      token0Address,
-      token1Address,
-      token0Meta,
-      token1Meta,
-      token0Balance,
-      token1Balance,
-    });
-  }, [poolAddress, poolData.token0, poolData.token1, token0Address, token1Address, token0Meta, token1Meta, token0Balance, token1Balance]);
-
   // Get LP token balance (the pool itself is the LP token)
   const lpBalance = useTokenBalance(poolAddress);
 
-  // Check approvals for adding liquidity
-  const token0Approval = useTokenApproval(token0Address, poolAddress, amount0);
-  const token1Approval = useTokenApproval(token1Address, poolAddress, amount1);
+  // Check approvals for adding liquidity (use debounced amounts)
+  const token0Approval = useTokenApproval(token0Address, poolAddress, debouncedAmount0);
+  const token1Approval = useTokenApproval(token1Address, poolAddress, debouncedAmount1);
 
   const { writeContract, writeContractAsync, data: hash, isPending, error: writeError } = useWriteContract();
   const { isLoading: isConfirming, isSuccess, isError: isTxError, error: txError } = useWaitForTransactionReceipt({ hash });
@@ -136,11 +140,12 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
   }, [isTxError, txError]);
 
   // Calculate expected LP output - use parseUnits for proper decimal handling
-  const amount0Wei = amount0 && parseFloat(amount0) > 0
-    ? parseUnits(amount0, token0Meta.decimals)
+  // Use debounced amounts to reduce RPC calls
+  const amount0Wei = debouncedAmount0 && parseFloat(debouncedAmount0) > 0
+    ? parseUnits(debouncedAmount0, token0Meta.decimals)
     : BigInt(0);
-  const amount1Wei = amount1 && parseFloat(amount1) > 0
-    ? parseUnits(amount1, token1Meta.decimals)
+  const amount1Wei = debouncedAmount1 && parseFloat(debouncedAmount1) > 0
+    ? parseUnits(debouncedAmount1, token1Meta.decimals)
     : BigInt(0);
 
   const { data: expectedLP, error: expectedLPError } = useReadContract({
@@ -152,32 +157,12 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
       true, // is_deposit
     ],
     query: {
-        enabled: !!poolAddress && action === 'add' && !!amount0 && !!amount1 && parseFloat(amount0) > 0 && parseFloat(amount1) > 0,
+      enabled: !!poolAddress && action === 'add' && !!debouncedAmount0 && !!debouncedAmount1 && parseFloat(debouncedAmount0) > 0 && parseFloat(debouncedAmount1) > 0,
+      staleTime: 15_000, // 15 seconds
+      gcTime: 60_000, // 1 minute cache
+      refetchOnWindowFocus: false,
     }
   });
-
-  // Debug expectedLP calculation
-  useEffect(() => {
-    if (action === 'add' && amount0 && amount1) {
-      console.log('Expected LP calculation:', {
-        amount0,
-        amount1,
-        amount0Wei: amount0Wei.toString(),
-        amount1Wei: amount1Wei.toString(),
-        expectedLP: expectedLP?.toString(),
-        expectedLPError: expectedLPError ? {
-          message: expectedLPError.message,
-          name: expectedLPError.name,
-          cause: expectedLPError.cause,
-        } : null,
-        enabled: !!poolAddress && action === 'add' && !!amount0 && !!amount1 && parseFloat(amount0) > 0 && parseFloat(amount1) > 0,
-        poolData: {
-          totalSupply: poolData.totalSupply?.toString(),
-          reserves: poolData.reserves,
-        },
-      });
-    }
-  }, [action, amount0, amount1, amount0Wei, amount1Wei, expectedLP, expectedLPError, poolAddress, poolData]);
 
   // Prepare transaction parameters for simulation
   const depositAmounts = useMemo<[bigint, bigint] | undefined>(() => {
@@ -201,40 +186,16 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
     // Safety check: if expectedLP seems too high (higher than input amounts), use a more conservative approach
     // This can happen when calc_token_amount returns an incorrect value
     if (expectedLP > depositAmounts[0] && expectedLP > depositAmounts[1]) {
-      console.warn('Expected LP is higher than input amounts - using conservative minLp', {
-        expectedLP: expectedLP.toString(),
-        amounts: depositAmounts.map(a => a.toString()),
-        calculatedMinLp: minLp.toString(),
-      });
       // Use the smaller amount with slippage as a cap
       const conservativeMinLp = (depositAmounts[0] < depositAmounts[1] ? depositAmounts[0] : depositAmounts[1]) * slippageMultiplier / BigInt(10000);
       if (minLp > conservativeMinLp) {
-        console.warn('Capping minLp to conservative value', {
-          original: minLp.toString(),
-          conservative: conservativeMinLp.toString(),
-        });
         minLp = conservativeMinLp;
       }
     }
-
-    console.log('minLp calculation:', {
-      expectedLP: expectedLP.toString(),
-      slippage,
-      slippageMultiplier: slippageMultiplier.toString(),
-      minLp: minLp.toString(),
-    });
   } else if (depositAmounts) {
     // Fallback: if expectedLP is not available, use 0 to allow transaction
     // This is safe because the contract will revert if slippage is too high
-    // But we should warn the user
     minLp = BigInt(0);
-    console.warn('expectedLP not available, using minLp = 0 (no slippage protection)', {
-      expectedLPError: expectedLPError?.message,
-      poolData: {
-        totalSupply: poolData.totalSupply?.toString(),
-        reserves: poolData.reserves,
-      },
-    });
   }
 
   // Simulate the transaction to catch errors before sending
@@ -245,28 +206,11 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
     args: depositAmounts && minLp !== undefined ? [depositAmounts, minLp] : undefined,
     query: {
       enabled: !!poolAddress && !!depositAmounts && minLp !== undefined && poolData.totalSupply !== undefined,
+      staleTime: 10_000, // 10 seconds
+      gcTime: 30_000, // 30 seconds cache
+      refetchOnWindowFocus: false,
     },
   });
-
-  // Log simulation errors with more detail
-  useEffect(() => {
-    if (simulateError) {
-      console.error('Transaction simulation error:', {
-        error: simulateError,
-        message: simulateError.message,
-        cause: simulateError.cause,
-        name: simulateError.name,
-        stack: simulateError.stack,
-        amounts: depositAmounts,
-        minLp: minLp?.toString(),
-        poolAddress,
-        poolData: {
-          totalSupply: poolData.totalSupply?.toString(),
-          reserves: poolData.reserves,
-        },
-      });
-    }
-  }, [simulateError, depositAmounts, minLp, poolAddress, poolData]);
 
   const executeFlowStep = useCallback(
     async (step: FlowStep) => {
@@ -400,10 +344,6 @@ export default function Liquidity({ poolAddress }: LiquidityProps) {
 
     let adjustedMinLp = minLp;
     if (expectedLP && expectedLP > depositAmounts[0] && expectedLP > depositAmounts[1] && adjustedMinLp !== undefined) {
-      console.warn('Expected LP is higher than input amounts - adjusting minLp to conservative value', {
-        expectedLP: expectedLP.toString(),
-        amounts: depositAmounts.map(a => a.toString()),
-      });
       const conservativeMinLp = (depositAmounts[0] < depositAmounts[1] ? depositAmounts[0] : depositAmounts[1]) * BigInt(9950) / BigInt(10000);
       if (adjustedMinLp > conservativeMinLp) {
         adjustedMinLp = conservativeMinLp;
